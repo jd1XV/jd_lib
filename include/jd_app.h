@@ -28,6 +28,7 @@
 
 typedef struct jd_PlatformWindow jd_PlatformWindow;
 jd_ExportFn jd_V2F jd_PlatformWindowGetDrawSize(jd_PlatformWindow* window);
+jd_ExportFn jd_V2F jd_PlatformWindowGetDrawOrigin(jd_PlatformWindow* window);
 jd_ExportFn jd_V2F jd_PlatformWindowGetScaledSize(jd_PlatformWindow* window);
 jd_ExportFn f64 jd_PlatformWindowGetDPIScale(jd_PlatformWindow* window);
 jd_ExportFn jd_V2F jd_PlatformGetMonitorDPI();

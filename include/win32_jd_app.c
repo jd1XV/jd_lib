@@ -341,7 +341,8 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
     
     jd_UIFontPush(jd_StrLit("OS_BaseFontWindows"));
     
-    f32 titlebar_height = 45.0f;
+    u32 titlebar_height = 45.0f;
+    
     {
         const f32 borders = 2.0f;
         SIZE titlebar_size = {0};
@@ -350,7 +351,7 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
         if (GetThemePartSize(theme, NULL, WP_CAPTION, CS_ACTIVE, NULL, TS_TRUE, &titlebar_size) != S_OK) {
             jd_LogError("Couldn't open theme!", jd_Error_MissingResource, jd_Error_Critical);
         } else {
-            titlebar_height = (f32)(titlebar_size.cy + borders);
+            titlebar_height = titlebar_size.cy + borders;
         }
         
         CloseThemeData(theme);
@@ -358,7 +359,7 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
     
     f32 dpi = GetDpiForWindow(window->handle);
     
-    window->custom_titlebar_size = titlebar_height;
+    window->custom_titlebar_size = titlebar_height * jd_PlatformWindowGetDPIScale(window);
     i32 frame_y = GetSystemMetricsForDpi(SM_CYFRAME, dpi);
     i32 padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     
@@ -1024,7 +1025,13 @@ jd_V2F jd_PlatformWindowGetDrawSize(jd_PlatformWindow* window) {
     window->pos_i.x = (i32)window_rect.left;
     window->pos_i.y = (i32)window_rect.top;
     
-    return window->size;
+    jd_V2F draw_size = {window->size.x, window->size.y - window->custom_titlebar_size};
+    
+    return draw_size;
+}
+
+jd_V2F jd_PlatformWindowGetDrawOrigin(jd_PlatformWindow* window) {
+    return (jd_V2F){0.0, window->custom_titlebar_size};
 }
 
 jd_ExportFn jd_V2F jd_PlatformWindowGetScaledSize(jd_PlatformWindow* window) {
