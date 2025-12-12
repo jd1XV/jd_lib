@@ -10,7 +10,7 @@ typedef struct jd_Internal_UIState {
     u64 active_viewport;
     
     jd_DArray* seeds;       // u32
-    jd_DArray* style_stack; // jd_UIBoxStyle
+    jd_DArray* parent_stack;
     jd_DArray* font_id_stack; // jd_String
 } jd_Internal_UIState;
 
@@ -22,7 +22,7 @@ static jd_Internal_UIState _jd_internal_ui_state = {0};
 jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box) {
     if (box->parent) {
         return box->parent->rect.max;
-    } else return box->vp->client_size;
+    } else return box->vp->size;
 }
 
 jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent() {
@@ -65,14 +65,6 @@ jd_ExportFn jd_ForceInline void jd_UISeedPop() {
     jd_DArrayPopBack(_jd_internal_ui_state.seeds);
 }
 
-void jd_UIStylePush(jd_UIStyle* style) {
-    jd_DArrayPushBack(_jd_internal_ui_state.style_stack, style);
-}
-
-void jd_UIStylePop() {
-    jd_DArrayPopBack(_jd_internal_ui_state.style_stack); 
-}
-
 jd_ExportFn jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
     jd_UIBoxRec* b = &(_jd_internal_ui_state.box_array[tag.key % _jd_internal_ui_state.box_array_size]);
     if (b->tag.key == 0 && b->tag.seed == 0) {
@@ -105,27 +97,14 @@ jd_ExportFn jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
 }
 
 jd_ForceInline b32 jd_UIRectContainsPoint(jd_UIViewport* vp, jd_RectF32 r, jd_V2F p) {
-    f64 sf = jd_PlatformWindowGetDPIScale(vp->window);
-    
-    jd_V2F min = {r.min.x * sf, r.min.y * sf};
-    jd_V2F max = {(r.min.x * sf) + (r.max.x * sf), (r.min.y * sf) + (r.max.y * sf)};
+    jd_V2F min = {r.min.x, r.min.y};
+    jd_V2F max = {(r.min.x) + (r.max.x), (r.min.y) + (r.max.y)};
     return ((p.x > min.x && p.x < max.x) && (p.y > min.y && p.y < max.y));
 }
 
 jd_UIBoxRec* jd_UIPickBoxForPos(jd_UIViewport* vp, jd_V2F pos) {
     jd_UIBoxRec* ret = 0;
     jd_UIBoxRec* b = vp->root;
-    {
-        while (b != 0) {
-            if (jd_UIRectContainsPoint(vp, b->rect, pos)) {
-                ret = b;
-            } 
-            jd_TreeTraversePreorder(b);
-        }
-        
-    }
-    
-    b = vp->menu_root;
     {
         while (b != 0) {
             if (jd_UIRectContainsPoint(vp, b->rect, pos)) {
@@ -188,12 +167,97 @@ void jd_UIFontPush(jd_String font_id) {
     jd_DArrayPushBack(_jd_internal_ui_state.font_id_stack, &font_id);
 }
 
-void jd_UIPopFont() {
+void jd_UIFontPop() {
+    if (_jd_internal_ui_state.font_id_stack->count == 0) {
+        jd_LogError("Mismatched calls to jd_UIFontPop()", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
     jd_DArrayPopBack(_jd_internal_ui_state.font_id_stack);
 }
 
 /*
+ideal usage code:
 
+typedef struct jd_UILayout {
+	jd_UILayoutDir dir;
+	jd_V2F padding;
+	f32 gap;
+} jd_UILayout;
+
+typedef struct jd_UISize {
+	jd_UISizeRule rule;
+	jd_V2F fixed_size;
+} jd_UISize;
+
+typedef struct jd_UIStyle {
+	jd_V4F bg_color;
+	f32 softness;
+	f32 rounding;
+	f32 thickness;
+jd_V4F label_color;
+} jd_UIStyle;
+
+
+static b32 file_menu_open = false;
+
+jd_UIBegin();
+
+jd_UISize size = {
+	.rule = jd_SizeRule_SizeByChildren
+};
+
+jd_UILayout layout = {
+.dir = jd_UILayourDir_LR,
+.padding = 3.0f,
+.gap = 2.0f
+};
+
+jd_UIStyle style = {
+.bg_color = {1.0, 1.0, 1.0, 1.0}
+}
+
+jd_UIStyle button_style = {
+.rounding = 1.0f,
+.softness = 1.0f,
+.bg_color = {1.0, 1.0, 1.0, 1.0}
+};
+
+jd_UIBeginContainer(jd_StrLit("##MenuBar"), &layout, &size, &style);
+
+if (jd_UILabelButton(jd_StrLit("File"), &button_style).l_clicked) {
+	  file_menu_open = true;
+}
+
+...
+
+jd_UIEndContainer();
+
+if (file_menu_open) {
+ jd_V2F origin = jd_UIBoxGetBottomLeft("##MenuBar");
+
+jd_UISize = {
+.rule = jd_SizeRule_SizeByChildren
+}
+
+jd_UILayout layout = {
+.dir = jd_UILayoutDir_TB,
+.padding = 3.0f,
+.gap = 2.0f
+};
+
+jd_UIBeginPopupContainer(jd_StrLit("##FileMenu"), &layout, &size, &style)
+
+if (jd_UILabelButton("Open", &button_style).l_clicked) {
+ ...
+}
+
+if (jd_UILabelButton("Save", &button_style).l_clicked) {
+...
+}
+
+jd_UIEndPopupContainer();
+
+jd_UIEnd();
 
 
 */
@@ -208,13 +272,13 @@ jd_UIResult jd_UIBox(jd_UIBoxConfig* config) {
     }
     
     jd_UIStyle* style = config->style;
+    
     if (!style) {
-        style = jd_DArrayGetBack(_jd_internal_ui_state.style_stack);
+        jd_LogError("No style specified!", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     
     b8 act_on_click = config->act_on_click;
     b8 clickable    = config->clickable;
-    b8 use_padding  = config->use_padding;
     
     jd_UITag tag = jd_UITagFromString(config->string_id);
     jd_UIBoxRec* b = jd_UIBoxGetByTag(tag);
@@ -222,13 +286,13 @@ jd_UIResult jd_UIBox(jd_UIBoxConfig* config) {
     jd_UIResult result = {0};
     result.box = b;
     
-    jd_V4F color         = style->color_button;
-    jd_V4F hovered_color = jd_V4FMul4(color, style->color_hover_mod);
-    jd_V4F active_color  = jd_V4FMul4(color, style->color_active_mod);
+    jd_V4F color         = style->bg_color;
+    jd_V4F hovered_color = style->bg_color_hovered;
+    jd_V4F active_color  = style->bg_color_active;
     
-    f32 softness        = style->box_softness;
-    f32 corner_radius   = style->corner_radius;
-    f32 thickness       = style->box_thickness;
+    f32 softness        = style->softness;
+    f32 corner_radius   = style->rounding;
+    f32 thickness       = style->thickness;
     
     // input handling
     if (!config->disabled) {
@@ -305,13 +369,17 @@ jd_UIResult jd_UIBox(jd_UIBoxConfig* config) {
     
     jd_TreeLinkLastChild(parent, b);
     
+    f64 dpi_sf = jd_WindowGetDPIScale(vp->window);
+    
     b->rect = config->rect;
-    b->vp = vp;
+    b->rect.max = (jd_V2F){b->rect.max.x * dpi_sf, b->rect.max.y * dpi_sf};
+    b->rect.min = (jd_V2F){b->rect.min.x * dpi_sf, b->rect.min.y * dpi_sf};
     
-    f64 dpi_sf = jd_PlatformWindowGetDPIScale(vp->window);
+    b->rect.min.y = jd_Max(vp->window->custom_titlebar_size, b->rect.min.y);
     
-    jd_V2F rect_size = {b->rect.max.x * dpi_sf, b->rect.max.y * dpi_sf};
-    jd_V2F rect_pos  = {b->rect.min.x * dpi_sf, b->rect.min.y * dpi_sf};
+    jd_V2F rect_pos = b->rect.min;
+    jd_V2F rect_size = b->rect.max;
+    
     jd_DrawRect(rect_pos, rect_size, color, corner_radius, softness, thickness);
     if (config->label.count > 0) {
         jd_String* font_id = jd_DArrayGetBack(_jd_internal_ui_state.font_id_stack);
@@ -327,57 +395,21 @@ jd_UIResult jd_UIBox(jd_UIBoxConfig* config) {
     return result;
 }
 
-jd_UIViewport* jd_UIBeginViewport(jd_PlatformWindow* window) {
+jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
     if (!_jd_internal_ui_state.arena) { // not yet initialized
-        _jd_internal_ui_state.arena = jd_ArenaCreate(GIGABYTES(2), KILOBYTES(4));
-        _jd_internal_ui_state.box_array_size = jd_UIBox_HashTable_Size;
-        _jd_internal_ui_state.box_array = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec) * jd_UIBox_HashTable_Size);
-        _jd_internal_ui_state.seeds = jd_DArrayCreate(2048, sizeof(u32));
-        _jd_internal_ui_state.style_stack = jd_DArrayCreate(2048, sizeof(jd_UIStyle));
-        _jd_internal_ui_state.font_id_stack = jd_DArrayCreate(2048, sizeof(jd_String));
-        
-        jd_UIStyle style = {0};
-        jd_DArrayPushBack(_jd_internal_ui_state.style_stack, &style);
+        jd_LogError("Call jd_UIInitForWindow() before jd_UIBegin", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     
-    jd_UIViewport* vp = 0;
+    jd_UIViewport* vp = viewport;
     
     for (u64 i = 0; i < _jd_internal_ui_state.viewport_count; i++) {
-        if (_jd_internal_ui_state.viewports[i].window == window) {
+        if (&_jd_internal_ui_state.viewports[i] == viewport) {
             _jd_internal_ui_state.active_viewport = i;
-            vp = &_jd_internal_ui_state.viewports[_jd_internal_ui_state.active_viewport];
             break;
         }
     }
     
-    if (!vp) {
-        jd_Assert(_jd_internal_ui_state.viewport_count + 1 < jd_UIViewports_Max);
-        vp = &_jd_internal_ui_state.viewports[_jd_internal_ui_state.viewport_count++];
-        
-        if (!vp) { // Sanity check
-            jd_LogError("Could not allocate a viewport!", jd_Error_OutOfMemory, jd_Error_Fatal);
-        } 
-        
-        vp->window = window;
-        vp->old_inputs.array = window->input_events;
-        vp->new_inputs.array = window->input_events;
-    }
-    
-    if (!vp->roots_init) {
-        vp->root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        vp->popup_root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        vp->menu_root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        vp->titlebar_root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        
-        vp->root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        vp->popup_root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        vp->menu_root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        vp->titlebar_root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
-        
-        vp->roots_init = true;
-    }
-    
-    vp->root->rect.max = window->size;
+    vp->root->rect.max = vp->window->size;
     
     // Get new inputs
     vp->old_inputs = vp->new_inputs;
@@ -399,11 +431,6 @@ jd_UIViewport* jd_UIBeginViewport(jd_PlatformWindow* window) {
     vp->popup_root_new = old_popup_root;
     jd_TreeLinksClear(vp->popup_root_new);
     
-    jd_UIBoxRec* old_menu_root = vp->menu_root;
-    vp->menu_root = vp->menu_root_new;
-    vp->menu_root_new = old_menu_root;
-    jd_TreeLinksClear(vp->menu_root_new);
-    
     jd_UIBoxRec* old_titlebar_root = vp->titlebar_root;
     vp->titlebar_root = vp->titlebar_root_new;
     vp->titlebar_root_new = old_titlebar_root;
@@ -411,5 +438,48 @@ jd_UIViewport* jd_UIBeginViewport(jd_PlatformWindow* window) {
     
     jd_UIPickActiveBox(vp);
     
+    jd_UISeedPushPtr(vp->window);
     return vp;
 }
+
+void jd_UIEnd() {
+    jd_UISeedPop();
+    if (!_jd_internal_ui_state.arena) {
+        jd_LogError("jd_UIEnd() called before jd_UIBegin()", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+}
+
+jd_UIViewport* jd_UIInitForWindow(jd_Window* window) {
+    if (!_jd_internal_ui_state.arena) { // not yet initialized
+        _jd_internal_ui_state.arena = jd_ArenaCreate(GIGABYTES(2), KILOBYTES(4));
+        _jd_internal_ui_state.box_array_size = jd_UIBox_HashTable_Size;
+        _jd_internal_ui_state.box_array = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec) * jd_UIBox_HashTable_Size);
+        _jd_internal_ui_state.seeds = jd_DArrayCreate(2048, sizeof(u32));
+        _jd_internal_ui_state.font_id_stack = jd_DArrayCreate(2048, sizeof(jd_String));
+    }
+    
+    jd_Assert(_jd_internal_ui_state.viewport_count + 1 < jd_UIViewports_Max);
+    jd_UIViewport* vp = &_jd_internal_ui_state.viewports[_jd_internal_ui_state.viewport_count++];
+    
+    if (!vp) { // Sanity check
+        jd_LogError("Could not allocate a viewport!", jd_Error_OutOfMemory, jd_Error_Fatal);
+    } 
+    
+    
+    vp->window = window;
+    vp->old_inputs.array = window->input_events;
+    vp->new_inputs.array = window->input_events;
+    
+    vp->root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
+    vp->popup_root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
+    vp->titlebar_root = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
+    
+    vp->root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
+    vp->popup_root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
+    vp->titlebar_root_new = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec));
+    
+    vp->roots_init = true;
+    
+    return vp;
+}
+

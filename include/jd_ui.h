@@ -12,23 +12,10 @@ typedef struct jd_UITag {
     u32 seed;
 } jd_UITag;
 
-typedef struct jd_UIStyle {
-    jd_String id;
-    jd_V2F    label_anchor;
-    jd_V4F    label_color;
-    jd_V4F    color_bg;
-    jd_V4F    color_border;
-    jd_V4F    color_label;
-    jd_V4F    color_button;
-    jd_V4F    color_menu;
-    jd_V4F    color_hover_mod;
-    jd_V4F    color_active_mod;
-    jd_V2F    padding;
-    f32       corner_radius;
-    f32       box_softness;
-    f32       border;
-    f32       box_thickness;
-} jd_UIStyle;
+typedef struct jd_UIState {
+    jd_Window* window;
+} jd_UIState;
+
 
 typedef struct jd_UIBoxRec {
     jd_UITag   tag;
@@ -36,6 +23,10 @@ typedef struct jd_UIBoxRec {
     jd_V2F     pos; // platform window space
     jd_V2F     label_anchor;
     jd_String  label;
+    
+    struct jd_UIStyle* style;
+    struct jd_UILayout* layout;
+    struct jd_UISize* size;
     
     struct jd_UIViewport* vp;
     
@@ -48,23 +39,22 @@ typedef struct jd_UIBoxRec {
 
 typedef struct jd_UIViewport {
     jd_V2F size;
+    
     jd_UIBoxRec* root;
     jd_UIBoxRec* popup_root;
-    jd_UIBoxRec* menu_root;
     jd_UIBoxRec* titlebar_root;
     
     jd_UIBoxRec* root_new;
     jd_UIBoxRec* popup_root_new;
-    jd_UIBoxRec* menu_root_new;
     jd_UIBoxRec* titlebar_root_new;
     
     jd_UIBoxRec* hot;
     jd_UIBoxRec* active;
     jd_UIBoxRec* last_active;
     
-    jd_V2F client_size;
+    jd_UIBoxRec* builder_parent;
     
-    jd_PlatformWindow* window;
+    jd_Window* window;
     
     b32 roots_init;
     
@@ -91,16 +81,57 @@ typedef struct jd_UIResult {
     b8 hovered;
 } jd_UIResult;
 
+typedef struct jd_UIStyle {
+    jd_V4F bg_color;
+    jd_V4F bg_color_hovered;
+    jd_V4F bg_color_active;
+    jd_V4F label_color;
+    f32    softness;
+    f32    rounding;
+    f32    thickness;
+} jd_UIStyle;
+
+typedef enum jd_UILayoutDir {
+    jd_UILayout_None,
+    jd_UILayout_LR,
+    jd_UILayout_RL,
+    jd_UILayout_TB,
+    jd_UILayout_BT,
+    jd_UILayout_Count
+} jd_UILayoutDir;
+
+typedef struct jd_UILayout {
+    jd_UILayoutDir dir;
+    jd_V2F         padding;
+    f32            gap;
+} jd_UILayout;
+
+typedef enum jd_UISizeRule {
+    jd_UISizeRule_Fixed,
+    jd_UISizeRule_SizeByChildren,
+    jd_UISizeRule_SizeByParent,
+    jd_UISizeRule_SizeGrow,
+    jd_UISizeRule_Count
+} jd_UISizeRule;
+
+typedef struct jd_UISize {
+    jd_UISizeRule rule;
+    jd_V2F fixed_size;
+    f32    pct_of_parent;
+} jd_UISize;
+
 typedef struct jd_UIBoxConfig {
     jd_UIBoxRec*  parent;
     jd_UIStyle*   style;
+    jd_UISize*    size;
+    
     jd_String     label;
     jd_V2F        label_alignment;
     jd_String     string_id;
+    
     jd_RectF32    rect;
     
     b8            clickable;
-    b8            use_padding;
     b8            act_on_click;
     b8            static_color;
     b8            disabled;
@@ -114,35 +145,32 @@ typedef struct jd_UIBoxConfig {
 
 typedef jd_UIBoxConfig jd_UIButtonConfig;
 
-jd_ExportFn jd_UIResult jd_UIBox(jd_UIBoxConfig* cfg);
-jd_ExportFn jd_UIViewport* jd_UIBeginViewport(jd_PlatformWindow* window);
+jd_ExportFn jd_UIResult    jd_UIBox(jd_UIBoxConfig* cfg);
+jd_ExportFn jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport);
+jd_ExportFn void           jd_UIEnd();
+jd_ExportFn jd_UIViewport* jd_UIInitForWindow(jd_Window* window);
 jd_ExportFn jd_ForceInline void jd_UISeedPushPtr(void* ptr);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
 jd_ExportFn jd_ForceInline void jd_UIStylePush(jd_UIStyle* style);
 jd_ExportFn jd_ForceInline void jd_UIStylePop();
 jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_String font_id);
-jd_ExportFn jd_ForceInline void jd_UIPopFont();
+jd_ExportFn jd_ForceInline void jd_UIFontPop();
 jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box);
 
 static jd_UIStyle jd_default_style_dark = {
-    .id = jd_StrConst("jd_default_style_dark"),
-    .label_anchor = {0},
-    .label_color = {.98f, .98f, .98f, 1.0f},
-    .color_bg = {.08f, .07f, .07f, 1.0f},
-    .color_border = {.15f, .15f, .15f, 1.0f},
-    .color_label = {.95f, .95f, .92f, 1.0f},
-    .color_button = {.10f, .10f, .08f, 1.0f},
-    .color_menu = {.09f, .09f, .06f, 1.0f},
-    .color_hover_mod = {1.30, 1.30f, 1.30f, 1.30f},
-    .color_active_mod = {.80f, .80f, .80f, 1.0f},
-    .padding = {8.0f, 8.f},
-    .corner_radius = 4.0f,
-    .box_softness = 0.0f,
-    .border = 3.0f,
-    .box_thickness = 0.0f
+    .bg_color = {.08f, .07f, .07f, 1.0f},
+    .bg_color_hovered = {.09f, .08f, .08f, 1.0f},
+    .bg_color_active = {.06f, .06f, .06f, 1.0f},
+    .label_color = {.9f, .9f, .9f, 1.0f},
+    .softness = 0.0f,
+    .rounding = 0.0f,
+    .thickness = 0.0f
 };
 
 #ifdef JD_IMPLEMENTATION
+
+
+
 #include "jd_ui.c"
 #endif
 

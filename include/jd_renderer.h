@@ -147,7 +147,7 @@ typedef struct jd_Renderer {
     
     jd_2DTexture* render_chain;
     
-    struct jd_PlatformWindow* current_window;
+    struct jd_Window* current_window;
     
     u32 max_texture_units;
     u32 max_texture_depth;

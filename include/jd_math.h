@@ -10,7 +10,9 @@
 u64 jd_Pow_u64(u64 b, u64 e);
 #define jd_Abs(x) (x < 0) ? x * -1 : x
 
-jd_V4F jd_V4FMul4(jd_V4F a, jd_V4F b);
+jd_ExportFn jd_V4F jd_V4FMul4(jd_V4F a, jd_V4F b);
+jd_ExportFn jd_V4F jd_V4FMulS(jd_V4F a, f32 b);
+jd_ExportFn jd_V4F jd_V4FColorLerp(jd_V4F a, jd_V4F b, f32 frac);
 
 #ifdef JD_IMPLEMENTATION
 #include "jd_math.c"

@@ -13,7 +13,7 @@ static const jd_String app_manifest = jd_StrConst("<?xml version=\"1.0\" encodin
 
 #define JD_APP_MAX_PACKAGE_NAME_LENGTH KILOBYTES(1)
 
-LRESULT CALLBACK jd_PlatformWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK jd_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 typedef struct jd_App {
     jd_Arena* arena;
@@ -22,7 +22,7 @@ typedef struct jd_App {
     
     HINSTANCE instance;
     
-    struct jd_PlatformWindow* windows[JD_APP_MAX_WINDOWS];
+    struct jd_Window* windows[JD_APP_MAX_WINDOWS];
     u64 window_count;
     
     b32 renderer_initialized;
@@ -39,7 +39,7 @@ typedef struct jd_App {
     PIXELFORMATDESCRIPTOR pixel_format_descriptor;
 } jd_App;
 
-struct jd_PlatformWindow {
+struct jd_Window {
     jd_App* app;
     jd_Arena* arena;
     jd_Arena* frame_arena;
@@ -75,7 +75,7 @@ struct jd_PlatformWindow {
     b8 closed;
 };
 
-b32 jd_AppWindowIsMaximized(jd_PlatformWindow* window) {
+b32 jd_AppWindowIsMaximized(jd_Window* window) {
     WINDOWPLACEMENT placement = {0};
     placement.length = sizeof(WINDOWPLACEMENT);
     if (GetWindowPlacement(window->handle, &placement)) {
@@ -139,7 +139,7 @@ void jd_AppSetCursor(jd_Cursor cursor) {
     }
 }
 
-jd_V2F jd_AppGetMousePos(jd_PlatformWindow* window) {
+jd_V2F jd_AppGetMousePos(jd_Window* window) {
     POINT p = {0};
     GetCursorPos(&p);
     ScreenToClient(window->handle, &p);
@@ -179,14 +179,14 @@ void jd_AppLoadLib(jd_App* app) {
     app->reloadable_dll = LoadLibraryExA(package_name_str->mem, NULL, 0);
     
     for (u64 i = 0; i < app->window_count; i++) {
-        jd_PlatformWindow* window = app->windows[i];
+        jd_Window* window = app->windows[i];
         window->func = (_jd_AppWindowFunction)GetProcAddress(app->reloadable_dll, window->function_name.mem);
     }
     
     jd_DStringRelease(package_name_str);
 }
 
-void jd_AppUpdatePlatformWindow(jd_PlatformWindow* window) {
+void jd_AppUpdatePlatformWindow(jd_Window* window) {
     jd_ArenaPopTo(window->frame_arena, 0);
     
     window->frame_watch = jd_TimerStop(window->frame_watch);
@@ -215,17 +215,14 @@ void jd_AppUpdatePlatformWindow(jd_PlatformWindow* window) {
     wglMakeCurrent(window->device_context, window->app->ogl_context);
     jd_RendererGet()->current_window = window;
     jd_RendererBegin(window->size);
-    jd_UIBeginViewport(window);
-    jd_UISeedPushPtr(window);
     window->func(window);
     window->titlebar_result = window->titlebar_function_ptr(window);
-    jd_UISeedPop();
     jd_RendererDraw();
     jd_ArenaPopTo(jd_RendererGet()->frame_arena, 0);
     SwapBuffers(window->device_context);
 }
 
-void jd_WindowDrawFPS(jd_PlatformWindow* window, jd_TextOrigin origin, jd_V2F pos) {
+void jd_WindowDrawFPS(jd_Window* window, jd_TextOrigin origin, jd_V2F pos) {
     if (!window->fps_counter_string) {
         window->fps_counter_string = jd_DStringCreate(256);
     }
@@ -261,7 +258,7 @@ void jd_AppUpdatePlatformWindows(jd_App* app) {
     }
     
     for (u64 i = 0; i < app->window_count; i++) {
-        jd_PlatformWindow* window = app->windows[i];
+        jd_Window* window = app->windows[i];
         
         if (window->titlebar_result.caption_clicked) {
             SendMessage(window->handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(jd_AppGetMousePos(window).x, jd_AppGetMousePos(window).y));
@@ -303,21 +300,21 @@ void jd_AppUpdatePlatformWindows(jd_App* app) {
     }
     
     for (u64 i = 0; i < app->window_count; i++) {
-        jd_PlatformWindow* window = app->windows[i];
+        jd_Window* window = app->windows[i];
         jd_AppUpdatePlatformWindow(window);
     }
     
     jd_UserLockRelease(app->lock);
 }
 
-void jd_AppPlatformCloseWindow(jd_PlatformWindow* window) {
+void jd_AppPlatformCloseWindow(jd_Window* window) {
     jd_App* app = window->app;
     u64 window_index = 0;
     for (window_index; window_index < app->window_count; window_index++) {
         if (app->windows[window_index] == window) {
-            jd_ZeroMemory(&app->windows[window_index], sizeof(jd_PlatformWindow*));
+            jd_ZeroMemory(&app->windows[window_index], sizeof(jd_Window*));
             if (window_index != app->window_count - 1) {
-                jd_MemMove(&app->windows[window_index], &app->windows[window_index] + 1, (app->window_count - (window_index + 1)) * sizeof(jd_PlatformWindow*)); }
+                jd_MemMove(&app->windows[window_index], &app->windows[window_index] + 1, (app->window_count - (window_index + 1)) * sizeof(jd_Window*)); }
             break;
         }
     }
@@ -343,6 +340,8 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
     
     u32 titlebar_height = 45.0f;
     
+    window->custom_titlebar_size = 0.0;
+    
     {
         const f32 borders = 2.0f;
         SIZE titlebar_size = {0};
@@ -358,28 +357,29 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
     }
     
     f32 dpi = GetDpiForWindow(window->handle);
-    
-    window->custom_titlebar_size = titlebar_height * jd_PlatformWindowGetDPIScale(window);
     i32 frame_y = GetSystemMetricsForDpi(SM_CYFRAME, dpi);
     i32 padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     
-    jd_UIStyle menu_style = jd_default_style_dark;
-    menu_style.color_button = menu_style.color_menu;
+    jd_UIStyle menu_style = {
+        .bg_color = {0.08f, .07f, .07f, 1.0f},
+        .bg_color_hovered = {0.12f, 0.12f, 0.12f, 1.0f},
+        .bg_color_active  = {0.04f, .04f, .04f, 1.0f},
+        .label_color      = {1.0f, 1.0f, 1.0f, 1.0f}
+    };
     
-    jd_UIStylePush(&menu_style);
     {
         jd_UIBoxConfig config = {0};
+        config.style = &menu_style;
         config.string_id = jd_StrLit("titlebar");
         config.label = window->app->package_name;
         config.label_alignment = jd_V2F(0.5, 0.5);
-        config.rect.max.x = jd_PlatformWindowGetScaledSize(window).x;
+        config.rect.max.x = jd_WindowGetScaledSize(window).x;
         config.rect.max.y = titlebar_height;
         config.rect.min.x  = 0.0f;
         config.rect.min.y  = 0.0f;
         config.act_on_click = true;
         config.static_color = true;
         config.clickable = true;
-        config.use_padding = true;
         
         jd_UIResult result = jd_UIBox(&config);
         if (result.l_clicked) {
@@ -388,26 +388,24 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
         
         titlebar_parent = result.box;
     }
-    jd_UIStylePop();
     
-    jd_UIStylePush(&jd_default_style_dark);
     b8 left = (window->titlebar_style == jd_TitleBarStyle_Left);
     jd_V2F button_size = {.x = 40.0f, .y = titlebar_height};
     
     {
         jd_UIBoxConfig config = {0};
+        config.style = &menu_style;
         config.parent = titlebar_parent;
         config.string_id = jd_StrLit("titlebar_closebutton");
         config.label = jd_StrLit(jd_FontIcon_Cancel);
         config.label_alignment = jd_V2F(0.5, 0.5);
         config.rect.max = button_size;
         config.clickable = true;
-        config.use_padding = true;
         
         if (left)
             config.rect.min.x  = 0.0f;
         else
-            config.rect.min.x  = jd_PlatformWindowGetScaledSize(window).x - button_size.x;
+            config.rect.min.x  = jd_WindowGetScaledSize(window).x - button_size.x;
         
         config.rect.min.y = 0.0f;
         jd_UIResult result = jd_UIBox(&config);
@@ -419,18 +417,18 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
     
     {
         jd_UIBoxConfig config = {0};
+        config.style = &menu_style;
         config.parent = titlebar_parent;
         config.string_id = jd_StrLit("titlebar_maxbutton");
         config.label_alignment = jd_V2F(0.5, 0.5);
         config.label = (jd_AppWindowIsMaximized(window)) ? jd_StrLit(jd_FontIcon_Popup) : jd_StrLit(jd_FontIcon_Plus);
         config.rect.max = button_size;
         config.clickable = true;
-        config.use_padding = true;
         
         if (left)
             config.rect.min.x  = button_size.x;
         else
-            config.rect.min.x  = jd_PlatformWindowGetScaledSize(window).x - (button_size.x * 2);
+            config.rect.min.x  = jd_WindowGetScaledSize(window).x - (button_size.x * 2);
         
         config.rect.min.y = 0.0f;
         
@@ -443,18 +441,18 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
     
     {
         jd_UIBoxConfig config = {0};
+        config.style = &menu_style;
         config.parent = titlebar_parent;
         config.string_id = jd_StrLit("titlebar_minbutton");
         config.label_alignment = jd_V2F(0.5, 0.5);
         config.label = jd_StrLit(jd_FontIcon_Minus);
         config.rect.max = button_size;
         config.clickable = true;
-        config.use_padding = true;
         
         if (left)
             config.rect.min.x  = button_size.x * 2;
         else
-            config.rect.min.x  = jd_PlatformWindowGetScaledSize(window).x - (button_size.x * 3);
+            config.rect.min.x  = jd_WindowGetScaledSize(window).x - (button_size.x * 3);
         
         config.rect.min.y = 0.0f;
         
@@ -464,15 +462,14 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
         }
     }
     
-    jd_UIStylePop();
     
     if (!jd_AppWindowIsMaximized(window)) {
-        menu_style.color_button.a = 0.0f;
-        jd_UIStylePush(&menu_style);
         jd_UIBoxConfig config = {0};
+        config.style = &menu_style;
+        config.style->bg_color = (jd_V4F){0.0f, 0.0f, 0.0f, 0.0f};
         config.parent = titlebar_parent;
         config.string_id = jd_StrLit("fake_shadow_titlebar");
-        config.rect.max.x = jd_PlatformWindowGetScaledSize(window).x;
+        config.rect.max.x = jd_WindowGetScaledSize(window).x;
         config.rect.max.y = padding + frame_y;
         config.rect.min.x  = 0.0f;
         config.rect.min.y  = 0.0f;
@@ -482,10 +479,11 @@ jd_TitleBarFunction(_jd_default_titlebar_function_custom) {
         //config.clickable = true;
         
         jd_UIResult result = jd_UIBox(&config);
-        jd_UIStylePop();
     }
     
-    jd_UIPopFont();
+    jd_UIFontPop();
+    
+    window->custom_titlebar_size = titlebar_height * jd_WindowGetDPIScale(window);
     
     return res;
 }
@@ -499,9 +497,9 @@ void jd_AppLoadSystemFont(jd_Arena* arena) {
     jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFontWindows"), icons, &jd_unicode_range_all, 11, 192);
 }
 
-jd_PlatformWindow* jd_AppPlatformCreateWindow(jd_PlatformWindowConfig* config) {
+jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     if (!config) {
-        jd_LogError("Window initialized without jd_PlatformWindowConfig*", jd_Error_APIMisuse, jd_Error_Fatal);
+        jd_LogError("Window initialized without jd_WindowConfig*", jd_Error_APIMisuse, jd_Error_Fatal);
         return 0;
     }
     
@@ -517,7 +515,7 @@ jd_PlatformWindow* jd_AppPlatformCreateWindow(jd_PlatformWindowConfig* config) {
     
     // Register the window class.
     jd_Arena* arena = jd_ArenaCreate(0, 0);
-    jd_PlatformWindow* window = jd_ArenaAlloc(arena, sizeof(*window));
+    jd_Window* window = jd_ArenaAlloc(arena, sizeof(*window));
     window->app = config->app;
     window->wndclass_str = jd_StringPush(arena, config->id_str);
     window->title = jd_StringPush(arena, config->title);
@@ -548,7 +546,7 @@ jd_PlatformWindow* jd_AppPlatformCreateWindow(jd_PlatformWindowConfig* config) {
         
         case JD_AM_STATIC: {
             if (!config->function_ptr) {
-                jd_LogError("App mode set to JD_AM_STATIC, but no Jd_AppWindowFunctionPtr supplied in jd_PlatformWindowConfig", jd_Error_APIMisuse, jd_Error_Fatal);
+                jd_LogError("App mode set to JD_AM_STATIC, but no Jd_AppWindowFunctionPtr supplied in jd_WindowConfig", jd_Error_APIMisuse, jd_Error_Fatal);
                 return 0;
             }
             
@@ -557,7 +555,7 @@ jd_PlatformWindow* jd_AppPlatformCreateWindow(jd_PlatformWindowConfig* config) {
         
         case JD_AM_RELOADABLE: {
             if (config->function_name.count == 0) {
-                jd_LogError("App mode set to JD_AM_RELOADABLE, but no function name supplied in jd_PlatformWindowConfig", jd_Error_APIMisuse, jd_Error_Fatal);
+                jd_LogError("App mode set to JD_AM_RELOADABLE, but no function name supplied in jd_WindowConfig", jd_Error_APIMisuse, jd_Error_Fatal);
                 return 0;
             }
             
@@ -574,10 +572,10 @@ jd_PlatformWindow* jd_AppPlatformCreateWindow(jd_PlatformWindowConfig* config) {
     
     WNDCLASSEX wc = {0};
     wc.cbSize = sizeof(WNDCLASSEX);
-    wc.lpfnWndProc   = jd_PlatformWindowProc;
+    wc.lpfnWndProc   = jd_WindowProc;
     wc.hInstance     = config->app->instance;
     wc.lpszClassName = window->wndclass_str.mem;
-    wc.cbWndExtra    = sizeof(jd_PlatformWindow*);
+    wc.cbWndExtra    = sizeof(jd_Window*);
     wc.hbrBackground = NULL;
     
     RegisterClassEx(&wc);
@@ -660,7 +658,7 @@ jd_PlatformWindow* jd_AppPlatformCreateWindow(jd_PlatformWindowConfig* config) {
         dummy_wc.lpfnWndProc   = DefWindowProc;
         dummy_wc.hInstance     = GetModuleHandle(NULL);
         dummy_wc.lpszClassName = "dummy_wndclass";
-        dummy_wc.cbWndExtra    = sizeof(jd_PlatformWindow*);
+        dummy_wc.cbWndExtra    = sizeof(jd_Window*);
         RegisterClassEx(&dummy_wc);
         u32 win_style = WS_OVERLAPPEDWINDOW;
         
@@ -824,10 +822,10 @@ jd_ForceInline void _jd_GetMods(jd_InputEvent* e) {
     
 }
 
-LRESULT CALLBACK jd_PlatformWindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+LRESULT CALLBACK jd_WindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPARAM l_param) {
     static u32 count = 0;
     jd_InputEvent e = {0};
-    jd_PlatformWindow* window = (jd_PlatformWindow*)GetWindowLongPtrA(window_handle, 0);
+    jd_Window* window = (jd_Window*)GetWindowLongPtrA(window_handle, 0);
     
     switch (msg) {
         
@@ -1009,7 +1007,7 @@ jd_App* jd_AppCreate(jd_AppConfig* config) {
     return app;
 }
 
-jd_V2F jd_PlatformWindowGetDrawSize(jd_PlatformWindow* window) {
+jd_V2F jd_WindowGetDrawSize(jd_Window* window) {
     // get the size
     RECT client_rect = {0};
     GetClientRect(window->handle, &client_rect);
@@ -1030,21 +1028,21 @@ jd_V2F jd_PlatformWindowGetDrawSize(jd_PlatformWindow* window) {
     return draw_size;
 }
 
-jd_V2F jd_PlatformWindowGetDrawOrigin(jd_PlatformWindow* window) {
+jd_V2F jd_WindowGetDrawOrigin(jd_Window* window) {
     return (jd_V2F){0.0, window->custom_titlebar_size};
 }
 
-jd_ExportFn jd_V2F jd_PlatformWindowGetScaledSize(jd_PlatformWindow* window) {
-    f64 scale_factor = jd_PlatformWindowGetDPIScale(window);
+jd_ExportFn jd_V2F jd_WindowGetScaledSize(jd_Window* window) {
+    f64 scale_factor = jd_WindowGetDPIScale(window);
     return (jd_V2F){window->size.w / scale_factor, window->size.h / scale_factor};
 }
 
-u32 jd_PlatformWindowGetDPI(jd_PlatformWindow* window) {
+u32 jd_WindowGetDPI(jd_Window* window) {
     u32 dpi = GetDpiForWindow(window->handle);
     return dpi;
 }
 
-f64 jd_PlatformWindowGetDPIScale(jd_PlatformWindow* window) {
+f64 jd_WindowGetDPIScale(jd_Window* window) {
     HMONITOR mon = MonitorFromWindow(window->handle, MONITOR_DEFAULTTONEAREST);
     u32 scale_factor = 100;
     u32 result = 0;

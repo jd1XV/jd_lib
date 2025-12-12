@@ -480,7 +480,7 @@ jd_ForceInline void jd_TextureQueue(jd_2DTexture* texture) {
 
 b32 jd_Internal_DrawGlyph(jd_Font* font, jd_V2F window_pos, jd_V4F col, jd_Glyph* g, f32* advance_out) {
     jd_Renderer* renderer = jd_RendererGet();
-    f32 dpi_scaling = ((f32)jd_PlatformWindowGetDPI(renderer->current_window) / (f32)g->face->dpi);
+    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)g->face->dpi);
     f32 x = window_pos.x;
     f32 y = window_pos.y;
     f32 z = 0.0f;
@@ -563,7 +563,7 @@ jd_V2F jd_CalcStringBoxMax(jd_String font_id, jd_V2F starting_pos, jd_UTFDecoded
     jd_Font* font = jd_FontGetByID(font_id);
     jd_Glyph* fallback = jd_FontGetGlyph(font, '?');
     
-    f32 dpi_scaling = ((f32)jd_PlatformWindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
+    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     
     jd_V2F window_bb = renderer->current_window->size;
     
@@ -648,7 +648,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
     jd_Font* font = jd_FontGetByID(font_id);
     jd_Glyph* fallback = jd_FontGetGlyph(font, '?');
     
-    f32 dpi_scaling = ((f32)jd_PlatformWindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
+    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     
     f32 line_adv = font->faces[0].line_adv;
     
@@ -731,7 +731,7 @@ jd_V2F jd_CalcStringSizeUTF8(jd_String font_id, jd_String str, f32 wrap_width) {
 void jd_DrawStringUTF32(jd_String font_id, jd_UTFDecodedString utf32_string, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width) {
     jd_Renderer* renderer = jd_RendererGet();
     jd_Font* font = jd_FontGetByID(font_id);
-    f32 dpi_scaling = ((f32)jd_PlatformWindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
+    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     jd_Glyph* fallback = jd_FontGetGlyph(font, '?');
     jd_V2F pos = window_pos;
     
@@ -813,7 +813,7 @@ void jd_DrawString(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextO
 void jd_DrawStringWithBG(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F text_color, jd_V4F bg_color, f32 wrap_width, f32 box_rounding, f32 box_softness, f32 thickness) {
     jd_Renderer* renderer = jd_RendererGet();
     jd_Font* font = jd_FontGetByID(font_id);
-    f32 dpi_scaling = ((f32)jd_PlatformWindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
+    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     jd_UTFDecodedString utf32_string = jd_UnicodeDecodeUTF8String(jd_RendererGet()->frame_arena, jd_UnicodeTF_UTF32, str, false);
     
     jd_V2F box_pos = {window_pos.x, window_pos.y};

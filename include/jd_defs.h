@@ -75,8 +75,8 @@ typedef struct jd_V4F {
     union {
         struct {
             f32 r;
-            f32 b;
             f32 g;
+            f32 b;
             f32 a;
         };
         struct {
