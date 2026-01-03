@@ -24,6 +24,16 @@
 #include "jd_input.h"
 #endif
 
+/*
+
+Reloadable functions:
+
+#ifdef JD_APP_RELOADABLE
+jd_ReloadableFunction
+#endif
+
+*/
+
 #define JD_APP_MAX_WINDOWS 2048
 
 typedef struct jd_Window jd_Window;
@@ -31,9 +41,6 @@ jd_ExportFn jd_V2F jd_WindowGetDrawSize(jd_Window* window);
 jd_ExportFn jd_V2F jd_WindowGetDrawOrigin(jd_Window* window);
 jd_ExportFn jd_V2F jd_WindowGetScaledSize(jd_Window* window);
 jd_ExportFn f64 jd_WindowGetDPIScale(jd_Window* window);
-jd_ExportFn jd_V2F jd_PlatformGetMonitorDPI();
-jd_ExportFn u32 jd_WindowGetDPI(jd_Window* window);
-jd_ExportFn jd_V2F jd_AppGetMousePos(jd_Window* window);
 
 typedef struct jd_App jd_App;
 jd_App* jd_AppCreate(struct jd_AppConfig* config);
@@ -82,8 +89,8 @@ typedef enum jd_Cursor {
     jd_Cursor_Count
 } jd_Cursor;
 
-typedef jd_TitleBarResult (*jd_TitleBarFunctionPtr)(struct jd_Window* window);
-#define jd_TitleBarFunction(x) jd_ExportFn jd_TitleBarResult x (struct jd_Window* window)
+typedef void (*jd_TitleBarFunctionPtr)(struct jd_Window* window);
+#define jd_TitleBarFunction(x) jd_ExportFn void x (struct jd_Window* window)
 
 typedef struct jd_WindowConfig {
     jd_App* app;
@@ -100,12 +107,12 @@ typedef struct jd_Window jd_Window;
 
 void       jd_AppUpdatePlatformWindows(jd_App* app);
 jd_Window* jd_AppCreateWindow(jd_WindowConfig* config);
+b32        jd_AppWindowIsActive(jd_Window* window);
 void       jd_AppPlatformCloseWindow(jd_Window* window);
 b32        jd_AppPlatformUpdate(jd_App* app);
 void       jd_AppSetCursor(jd_Cursor cursor);
 jd_ExportFn void jd_WindowDrawFPS(jd_Window* window, jd_TextOrigin origin, jd_V2F pos);
-
-typedef void (*_jd_AppWindowFunction)(struct jd_Window* window);
+jd_ExportFn void jd_AppDefaultTitlebar(jd_Window* window);
 
 #ifdef JD_WINDOWS
 

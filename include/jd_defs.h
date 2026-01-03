@@ -46,7 +46,8 @@ typedef struct jd_V2F {
         struct {
             f32 w;
             f32 h;
-        }; 
+        };
+        f32 val[2];
     };
     
 } jd_V2F;

@@ -12,21 +12,76 @@ typedef struct jd_UITag {
     u32 seed;
 } jd_UITag;
 
-typedef struct jd_UIState {
-    jd_Window* window;
-} jd_UIState;
+typedef struct jd_UIStyle {
+    jd_V4F bg_color;
+    jd_V4F bg_color_hovered;
+    jd_V4F bg_color_active;
+    
+    jd_V4F label_color;
+    jd_V2F label_padding;
+    
+    f32    softness;
+    f32    rounding;
+    f32    thickness;
+} jd_UIStyle;
+
+typedef enum jd_UILayoutDir {
+    jd_UILayout_LeftToRight,
+    jd_UILayout_RightToLeft,
+    jd_UILayout_TopToBottom,
+    jd_UILayout_BottomToTop,
+    jd_UILayout_Count
+} jd_UILayoutDir;
+
+typedef enum jd_UIAxis {
+    jd_UIAxis_X,
+    jd_UIAxis_Y,
+    jd_UIAxis_Count
+} jd_UIAxis;
+
+typedef struct jd_UILayout {
+    jd_UILayoutDir dir;
+    f32            gap;
+} jd_UILayout;
+
+typedef enum jd_UISizeRule {
+    jd_UISizeRule_Grow,
+    jd_UISizeRule_Fixed,
+    jd_UISizeRule_FitChildren,
+    jd_UISizeRule_PctParent,
+    jd_UISizeRule_FitText,
+    jd_UISizeRule_Count
+} jd_UISizeRule;
+
+
+typedef struct jd_UISize {
+    jd_UISizeRule rule[2];
+    jd_V2F fixed_size;
+    jd_V2F min_size;
+    jd_V2F pct_of_parent;
+} jd_UISize;
 
 
 typedef struct jd_UIBoxRec {
     jd_UITag   tag;
     jd_RectF32 rect;
     jd_V2F     pos; // platform window space
-    jd_V2F     label_anchor;
+    jd_V2F     label_alignment;
     jd_String  label;
+    jd_String* font_id;
+    jd_V4F     color;
+    
+    jd_UISize size;
+    jd_V2F calculated_size;
+    jd_V2F calculated_remaining;
+    
+    jd_Cursor cursor;
+    
+    jd_UIAxis layout_axis;
+    jd_V2F    fixed_position;
     
     struct jd_UIStyle* style;
     struct jd_UILayout* layout;
-    struct jd_UISize* size;
     
     struct jd_UIViewport* vp;
     
@@ -39,6 +94,7 @@ typedef struct jd_UIBoxRec {
 
 typedef struct jd_UIViewport {
     jd_V2F size;
+    jd_V2F position_offset;
     
     jd_UIBoxRec* root;
     jd_UIBoxRec* popup_root;
@@ -81,55 +137,19 @@ typedef struct jd_UIResult {
     b8 hovered;
 } jd_UIResult;
 
-typedef struct jd_UIStyle {
-    jd_V4F bg_color;
-    jd_V4F bg_color_hovered;
-    jd_V4F bg_color_active;
-    jd_V4F label_color;
-    f32    softness;
-    f32    rounding;
-    f32    thickness;
-} jd_UIStyle;
-
-typedef enum jd_UILayoutDir {
-    jd_UILayout_None,
-    jd_UILayout_LR,
-    jd_UILayout_RL,
-    jd_UILayout_TB,
-    jd_UILayout_BT,
-    jd_UILayout_Count
-} jd_UILayoutDir;
-
-typedef struct jd_UILayout {
-    jd_UILayoutDir dir;
-    jd_V2F         padding;
-    f32            gap;
-} jd_UILayout;
-
-typedef enum jd_UISizeRule {
-    jd_UISizeRule_Fixed,
-    jd_UISizeRule_SizeByChildren,
-    jd_UISizeRule_SizeByParent,
-    jd_UISizeRule_SizeGrow,
-    jd_UISizeRule_Count
-} jd_UISizeRule;
-
-typedef struct jd_UISize {
-    jd_UISizeRule rule;
-    jd_V2F fixed_size;
-    f32    pct_of_parent;
-} jd_UISize;
-
 typedef struct jd_UIBoxConfig {
     jd_UIBoxRec*  parent;
     jd_UIStyle*   style;
-    jd_UISize*    size;
+    jd_UISize     size;
+    jd_UILayout   layout;
+    jd_V2F        fixed_position;
     
     jd_String     label;
     jd_V2F        label_alignment;
     jd_String     string_id;
     
     jd_RectF32    rect;
+    jd_V4F        color;
     
     b8            clickable;
     b8            act_on_click;
@@ -146,6 +166,8 @@ typedef struct jd_UIBoxConfig {
 typedef jd_UIBoxConfig jd_UIButtonConfig;
 
 jd_ExportFn jd_UIResult    jd_UIBox(jd_UIBoxConfig* cfg);
+jd_ExportFn jd_UIResult    jd_UIBoxBegin(jd_UIBoxConfig* cfg);
+jd_ExportFn void           jd_UIBoxEnd();
 jd_ExportFn jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport);
 jd_ExportFn void           jd_UIEnd();
 jd_ExportFn jd_UIViewport* jd_UIInitForWindow(jd_Window* window);
@@ -153,15 +175,23 @@ jd_ExportFn jd_ForceInline void jd_UISeedPushPtr(void* ptr);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
 jd_ExportFn jd_ForceInline void jd_UIStylePush(jd_UIStyle* style);
 jd_ExportFn jd_ForceInline void jd_UIStylePop();
+jd_ExportFn jd_ForceInline void jd_UIStyleGet();
 jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_String font_id);
 jd_ExportFn jd_ForceInline void jd_UIFontPop();
+jd_ExportFn jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent();
 jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box);
+jd_ExportFn jd_UIResult jd_UIButton(jd_String label, jd_UISize size, b8 act_on_click, b8 static_color);
+jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label);
+jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
+jd_ExportFn jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
+jd_ExportFn void        jd_UIRegionEnd();
 
 static jd_UIStyle jd_default_style_dark = {
-    .bg_color = {.08f, .07f, .07f, 1.0f},
-    .bg_color_hovered = {.09f, .08f, .08f, 1.0f},
-    .bg_color_active = {.06f, .06f, .06f, 1.0f},
+    .bg_color = {.1f, .1f, .1f, 1.0f},
+    .bg_color_hovered = {.2f, .2f, .2f, 1.0f},
+    .bg_color_active = {.00f, .00f, .00f, 1.0f},
     .label_color = {.9f, .9f, .9f, 1.0f},
+    .label_padding = {10.0f, 10.0f},
     .softness = 0.0f,
     .rounding = 0.0f,
     .thickness = 0.0f

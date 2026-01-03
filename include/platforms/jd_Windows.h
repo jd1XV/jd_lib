@@ -26,9 +26,17 @@
 #endif
 
 #ifdef JD_APP_RELOADABLE
-#define jd_AppWindowFunction(x) __declspec(dllexport) void __cdecl x (struct jd_Window* window)
+#define jd_AppWindowFunction(x) __declspec(dllexport) void x (struct jd_Window* window)
+#define jd_Reloadable __declspec(dllexport)
 #else
 #define jd_AppWindowFunction(x) void x (struct jd_Window* window)
 #endif
 
 #endif //JD__WINDOWS_H
+
+/*
+
+Calling: 
+Declaring: #define jd_Reloadable __declspec(dllexport)
+
+*/

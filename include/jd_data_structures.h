@@ -124,6 +124,24 @@ jd_DLinksPop(x);\
 jd_TreeLinksClear(x);\
 } while (0) \
 
+#define jd_TreeGetPostorderRoot(x) \
+do { \
+while (x->first_child) { \
+x = x->first_child; \
+} \
+} while (0) \
+
+#define jd_TreeTraversePostorder(x) \
+do { \
+if (x->next) { \
+x = x->next; \
+while (x->first_child) { \
+x = x->first_child; \
+} \
+break; \
+} \
+else x = x->parent; \
+} while (0) \
 
 #define jd_TreeTraversePreorder(x) \
 do { \
