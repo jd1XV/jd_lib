@@ -75,6 +75,122 @@ jd_ForceInline static void _jd_UTF8toUTF32(jd_UTFDecodedString* dec_str, jd_Stri
     }
 }
 
+u32 jd_UnicodeDecodeUTF16Codepoint(u16* buf, u32 count) {
+    u32 codepoint = 0;
+    if (count == 0) {
+        return codepoint;
+    }
+    
+    if (count > 2) {
+        return codepoint;
+    }
+    
+    if (count == 1) {
+        codepoint = (*buf);
+        return codepoint;
+    } 
+    
+    else {
+        u16 high_sur = (*buf + 1);
+        u16 low_sur  = (*buf);
+        
+        high_sur -= 0xD800;
+        high_sur *= 0x400;
+        
+        low_sur -= 0xDC00;
+        
+        codepoint = high_sur + low_sur + 0x10000;
+        return codepoint;
+    }
+}
+
+u32 jd_UnicodeUTF32toUTF8(u32 codepoint, c8* buffer, u32 buf_size) {
+    
+    if (buf_size < 4) {
+        jd_LogError("Insufficient buffer size for jd_UnicodeUTF16toUTF8. Buffer must be at least 4 bytes.", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    u32 count = 0;
+    
+    if (codepoint <= (0x7F)) {
+        buffer[count] = (c8)codepoint;
+        count++;
+    }
+    
+    else if (codepoint < (1 << 11)) {
+        buffer[count] = 0xC0 | (codepoint >> 6);
+        count++;
+        buffer[count] = 0x80 | (codepoint & 0x3F);
+        count++;
+    }
+    
+    else if (codepoint < (1 << 16)) {
+        buffer[count] = 0xE0 | (codepoint >> 12);
+        count++;
+        buffer[count] = 0x80 | ((codepoint >> 6) & 0x3F);
+        count++;
+        buffer[count] = 0x80 | (codepoint & 0x3F);
+        count++;
+    }
+    
+    else if (codepoint < (1 << 21)) {
+        buffer[count] = 0xF0 | (codepoint >> 18);
+        count++;
+        buffer[count] = 0x80 | ((codepoint >> 12) & 0x3F);
+        count++;
+        buffer[count] = 0x80 | ((codepoint >> 6) & 0x3F);
+        count++;
+        buffer[count] = 0x80 | (codepoint & 0x3F);
+        count++;
+    }
+    
+    return count;
+}
+
+u32 jd_UnicodeUTF16toUTF8(u16 wide[2], u32 wide_count, c8* buffer, u32 buf_size) {
+    if (buf_size < 4) {
+        jd_LogError("Insufficient buffer size for jd_UnicodeUTF16toUTF8. Buffer must be at least 4 bytes.", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    u32 count = 0;
+    
+    u32 codepoint = jd_UnicodeDecodeUTF16Codepoint(wide, buf_size);
+    
+    if (codepoint <= (0x7F)) {
+        buffer[count] = (c8)codepoint;
+        count++;
+    }
+    
+    else if (codepoint < (1 << 11)) {
+        buffer[count] = 0xC0 | (codepoint >> 6);
+        count++;
+        buffer[count] = 0x80 | (codepoint & 0x3F);
+        count++;
+    }
+    
+    else if (codepoint < (1 << 16)) {
+        buffer[count] = 0xE0 | (codepoint >> 12);
+        count++;
+        buffer[count] = 0x80 | ((codepoint >> 6) & 0x3F);
+        count++;
+        buffer[count] = 0x80 | (codepoint & 0x3F);
+        count++;
+    }
+    
+    else if (codepoint < (1 << 21)) {
+        buffer[count] = 0xF0 | (codepoint >> 18);
+        count++;
+        buffer[count] = 0x80 | ((codepoint >> 12) & 0x3F);
+        count++;
+        buffer[count] = 0x80 | ((codepoint >> 6) & 0x3F);
+        count++;
+        buffer[count] = 0x80 | (codepoint & 0x3F);
+        count++;
+    }
+    
+    return count;
+} 
+
 jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf, jd_String input, b32 validate) {
     jd_UTFDecodedString dec_str = {
         .tf = tf,
@@ -98,14 +214,14 @@ jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf,
     return dec_str;
 }
 
-u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64* index) {
+u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index) {
     static const u8 length_table[] = {
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
     };
     static const i32 masks[]  = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
     
-    u64 i = *index;
+    u64 i = index;
     
     if (i >= string.count) {
         return 0;
@@ -143,8 +259,6 @@ u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64* index) {
             codepoint |= (string.mem[i + 3] & 0x3f) << 0;
         } break;
     }
-    
-    *index += length;
     
     return codepoint;
     
@@ -202,3 +316,26 @@ jd_String jd_UnicodeEncodeUTF32toUTF8(jd_Arena* arena, jd_UTFDecodedString input
     str.count = real_count;
     return str;
 }
+
+void jd_UnicodeSeekDeltaUTF8(jd_String string, u64* index, i64 delta) {
+    u64 i = *index;
+    i64 si = i;
+    if (si + delta > (i64)string.count) delta = string.count - i;
+    if (si + delta < 0)            delta = -si;
+    
+    if (delta < 0) {
+        for (i64 d = delta; d < 0; d++) {
+            i--;
+            for (; i >= 0, (string.mem[i] >> 6) == 0x2; i--);
+        }
+    } else { 
+        for (i64 d = 0; d < delta; d++) {
+            i++;
+            for (; i < string.count, (string.mem[i] >> 6) == 0x2; i++);
+        }
+    }
+    
+    *index = i;
+} 
+
+
