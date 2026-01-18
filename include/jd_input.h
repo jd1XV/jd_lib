@@ -160,13 +160,14 @@ typedef enum jd_KeyMod {
 
 typedef struct jd_InputEvent {
     jd_Key    key;
+    u8        scancode;
     u32       mods;
     jd_V2F    mouse_drag_start;
     jd_V2F    mouse_pos;
     jd_V2F    mouse_delta;
     jd_V2F    scroll_delta;
     jd_String drag_drop_data;
-    jd_String input_text;
+    u32       codepoint;
     b8        release_event; // 0 means it's a down event, and I feel fine assuming that's the usual case
 } jd_InputEvent;
 

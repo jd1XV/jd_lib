@@ -1,4 +1,4 @@
-#version 430
+#version 460
 in vec3 fs_xyz;
 in vec3 fs_uvw;
 in vec4 fs_col;
