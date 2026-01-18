@@ -157,22 +157,15 @@ jd_ExportFn jd_Renderer* jd_RendererGet();
 void jd_RendererInit();
 jd_ExportFn void jd_RendererBegin(jd_V2F render_size);
 jd_ExportFn void jd_DrawString(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width);
-jd_ExportFn void jd_DrawStringWithZ(jd_String font_id, jd_String str, jd_V3F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width);
-jd_ExportFn jd_V2F jd_CalcStringSizeUTF8(jd_String font_id, jd_String str, f32 wrap_width);
-jd_ExportFn u64 jd_CalcCursorIndex(jd_String font_id, jd_UTFDecodedString utf32_string, f32 wrap_width, jd_V2F desired_pos);
-jd_ExportFn jd_V2F jd_CalcCursorPos(jd_String font_id, jd_UTFDecodedString utf32_string, f32 wrap_width, u64 cursor_index);
+jd_ExportFn void jd_CalcStringBoxUTF8(jd_String font_id, jd_String str, f32 wrap_width);
 jd_ExportFn void jd_DrawStringWithBG(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F text_color, jd_V4F bg_color, f32 wrap_width, f32 box_rounding, f32 box_softness, f32 box_thickness);
 jd_ExportFn void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness);
-jd_ExportFn void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness);
 jd_ExportFn void jd_RendererSetDPIScale(jd_Renderer* renderer, f32 scale);
 jd_ExportFn void jd_RendererBegin(jd_V2F render_size);
 jd_ExportFn void jd_RefreshFonts();
 jd_ExportFn void jd_RendererDraw();
 jd_ExportFn void jd_FontCreateEmpty(jd_String id, u64 max_memory, u64 max_faces);
 jd_ExportFn void jd_FontAddTypefaceFromMemory(jd_String font_id, jd_File file, jd_TypefaceUnicodeRange* range, i32 point_size, f32 dpi);
-jd_ExportFn f32  jd_FontGetLineAdvForCodepoint(jd_String font_id, u32 codepoint);
-jd_ExportFn f32  jd_FontGetLineHeightForCodepoint(jd_String font_id, u32 codepoint);
-jd_ExportFn jd_Font* jd_FontGetByID(jd_String font_id);
 #ifdef JD_IMPLEMENTATION
 #include "jd_renderer.c"
 #endif

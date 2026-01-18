@@ -45,21 +45,17 @@ jd_ExportFn jd_UITag jd_UITagFromString(jd_String str) {
     u32 hash = jd_HashStrToU32(str, *seed);
     
     jd_UITag t = {
-        .key = hash
+        .key = hash,
+        .seed = *seed
     };
     
     return t;
 }
 
-// FIXME: Fairly certain this is badly broken!
 jd_ExportFn jd_ForceInline void jd_UISeedPushPtr(void* ptr) {
-    u32 ptru = (u32)((u64)ptr);
+    u64 ptru = (u64)ptr;
     u32 hash = jd_HashU64toU32(ptru, 7);
     jd_DArrayPushBack(_jd_internal_ui_state.seeds, &hash);
-}
-
-jd_ExportFn jd_ForceInline void jd_UISeedPushTag(jd_UITag tag) {
-    jd_DArrayPushBack(_jd_internal_ui_state.seeds, &tag.key);
 }
 
 jd_ExportFn jd_ForceInline void jd_UISeedPop() {
@@ -72,19 +68,19 @@ jd_ExportFn jd_ForceInline void jd_UISeedPop() {
 
 jd_ExportFn jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
     jd_UIBoxRec* b = &(_jd_internal_ui_state.box_array[tag.key % _jd_internal_ui_state.box_array_size]);
-    if (b->tag.key == 0) {
+    if (b->tag.key == 0 && b->tag.seed == 0) {
         b->tag.key = tag.key;
-        int x = 0;
+        b->tag.seed = tag.seed;
         return b;
     }
     
     while (b->next_with_same_hash != 0) {
-        if (b->tag.key == tag.key)
+        if (b->tag.key == tag.key && b->tag.seed == tag.seed)
             break;
         b = b->next_with_same_hash;
     }
     
-    if (b->tag.key != tag.key) {
+    if (b->tag.key != tag.key || b->tag.seed != tag.seed) {
         if (_jd_internal_ui_state.box_free_slot) {
             b = _jd_internal_ui_state.box_free_slot;
             _jd_internal_ui_state.box_free_slot = b->next;
@@ -95,6 +91,7 @@ jd_ExportFn jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
         }
         
         b->tag.key = tag.key;
+        b->tag.seed = tag.seed;
     }
     
     return b;
@@ -131,38 +128,18 @@ jd_UIBoxRec* jd_UIPickBoxForPos(jd_UIViewport* vp, jd_V2F pos) {
         
     }
     
-    return ret;
-}
-
-void jd_UI_Internal_InsertCodepoint(jd_UITextBox* textbox, u32 codepoint) {
-    c8 utf8_buf[4] = {0};
-    u32 write_size = jd_UnicodeUTF32toUTF8(codepoint, utf8_buf, 4);
-    jd_String* input_text_string = textbox->string;
-    if (input_text_string->count + write_size < textbox->max) {
-        if (input_text_string->count > 0 && textbox->cursor < input_text_string->count - 1) {
-            jd_MemMove(&input_text_string->mem[textbox->cursor + write_size], &input_text_string->mem[textbox->cursor], input_text_string->count - textbox->cursor);
+    b = vp->titlebar_root;
+    {
+        while (b != 0) {
+            if (jd_UIRectContainsPoint(vp, b->rect, pos)) {
+                ret = b;
+            } 
+            jd_TreeTraversePreorder(b);
         }
         
-        jd_MemMove(&input_text_string->mem[textbox->cursor], utf8_buf, write_size);
-        input_text_string->count += write_size;
-        textbox->cursor += write_size;
     }
-}
-
-void jd_UI_Internal_DeleteCodepoint(jd_UITextBox* textbox) {
-    if (textbox->cursor == 0) return;
-    u64 c = textbox->cursor;
     
-    jd_String* string = textbox->string;
-    
-    jd_UnicodeSeekDeltaUTF8(*string, &c, -1);
-    
-    u64 size = string->count - c;
-    
-    jd_MemMove(&string->mem[c], &string->mem[textbox->cursor], size);
-    string->mem[string->count] = 0;
-    string->count = string->count - (textbox->cursor - c);
-    textbox->cursor = c;
+    return ret;
 }
 
 void jd_UIPickActiveBox(jd_UIViewport* vp) {
@@ -171,10 +148,6 @@ void jd_UIPickActiveBox(jd_UIViewport* vp) {
         if (!e) { // Sanity Check
             jd_LogError("Incorrect input slice range!", jd_Error_APIMisuse, jd_Error_Fatal);
         }
-        
-        b8 text_edit_active = (vp->last_active && vp->last_active->text_edit);
-        
-        i64 delta = 0;
         
         switch (e->key) {
             case jd_MB_Left:
@@ -186,11 +159,8 @@ void jd_UIPickActiveBox(jd_UIViewport* vp) {
                 } else {
                     vp->active = jd_UIPickBoxForPos(vp, e->mouse_pos);
                 }
-                
-                
-            } break;
+            }
         }
-        
     }
 }
 
@@ -248,7 +218,7 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     
     if (!style) {
         style = &jd_default_style_dark;
-        //jd_LogError("No style specified! Using default style", jd_Error_APIMisuse, jd_Error_Warning);
+        jd_LogError("No style specified! Using default style", jd_Error_APIMisuse, jd_Error_Warning);
     }
     
     b8 act_on_click = config->act_on_click;
@@ -261,19 +231,10 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     
     jd_UIResult result = {0};
     result.box = b;
-    result.last_active = (b == vp->last_active);
     
     jd_V4F color         = style->bg_color;
     jd_V4F hovered_color = style->bg_color_hovered;
     jd_V4F active_color  = style->bg_color_active;
-    
-    
-    if (b->anchor_box) {
-        parent = vp->popup_root_new;
-    }
-    
-    b->draw_index = vp->box_count;
-    vp->box_count++;
     
     // input handling
     if (!config->disabled) {
@@ -345,37 +306,29 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     }
     
     b->style = style;
-    b->text_edit = config->text_edit;
-    b->text_box.string  = config->text_box.string;
-    if (config->text_box.string && config->text_box.string->count < b->text_box.cursor) b->text_box.cursor = 0;
-    
-    b->text_box.max     = config->text_box.max;
     b->fixed_position = config->fixed_position;
-    b->anchor_box = config->anchor_box;
     b->label = config->label;
     b->label_alignment = config->label_alignment;
     b->color = color;
-    b->anchor_reference_point = config->anchor_reference_point;
-    b->string_id = config->string_id;
     b->layout = &config->layout;
     b->layout_axis = ((b->layout->dir == jd_UILayout_LeftToRight) || b->layout->dir == jd_UILayout_RightToLeft) ? jd_UIAxis_X : jd_UIAxis_Y;
     b->size = config->size;
-    b->font_id = *(jd_String*)jd_DArrayGetBack(_jd_internal_ui_state.font_id_stack);
+    b->font_id = jd_DArrayGetBack(_jd_internal_ui_state.font_id_stack);
     b->cursor = config->cursor;
-    b->match_siblings_offaxis = config->match_siblings_offaxis;
     
     jd_TreeLinkLastChild(parent, b);
     
-    vp->builder_last_box = b;
-    
     jd_UIParentPush(b);
-    jd_UISeedPushTag(b->tag);
     
     return result;
 }
 
 void jd_UIBoxEnd() {
-    jd_UISeedPop();
+    jd_UIViewport* vp = jd_UIViewportGetCurrent();
+    
+    jd_UIBoxRec** bp = jd_DArrayGetBack(_jd_internal_ui_state.parent_stack);
+    jd_UIBoxRec* b = *bp;
+    
     jd_UIParentPop();
 }
 
@@ -407,8 +360,6 @@ jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
     
     vp->position_offset = jd_WindowGetDrawOrigin(viewport->window);
     
-    vp->box_count = 0;
-    
     jd_UIBoxRec* old_root = vp->root;
     vp->root = vp->root_new;
     vp->root_new = old_root;
@@ -430,6 +381,8 @@ jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
         jd_UIPickActiveBox(vp);
     }
     
+    
+    
     jd_UISeedPushPtr(vp->window);
     return vp;
 }
@@ -443,7 +396,7 @@ void jd_UI_Internal_SolveFixedSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
         }
         
         else if (b->size.rule[axis] == jd_UISizeRule_FitText) {
-            b->rect.max.val[axis] = jd_CalcStringSizeUTF8(b->font_id, b->label, 0.0f).val[axis]; 
+            b->rect.max.val[axis] = jd_CalcStringSizeUTF8(*b->font_id, b->label, 0.0f).val[axis]; 
             b->rect.max.val[axis] += b->style->label_padding.val[axis];
         }
         
@@ -521,11 +474,7 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
         
         for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
             if (axis != b->layout_axis) {
-                if (c->match_siblings_offaxis) {
-                    c->rect.max.val[axis] = allowed_size;
-                } else {
-                    c->rect.max.val[axis] = jd_Min(c->rect.max.val[axis], allowed_size);
-                }
+                c->rect.max.val[axis] = jd_Min(c->rect.max.val[axis], allowed_size);
             }
             
             else {
@@ -533,17 +482,14 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
                 u32 grow_children = 0;
                 
                 for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
-                    if (!c->anchor_box) {
-                        requested_size += c->rect.max.val[axis];
-                    }
-                    
+                    requested_size += c->rect.max.val[axis];
                     if (c->size.rule[axis] == jd_UISizeRule_Grow) {
                         grow_children++;
                     }
                 }
                 
                 f32 over = requested_size - allowed_size;
-                if (over > 0 && !b->anchor_box) {
+                if (over > 0) {
                     for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
                         if (c->size.rule[axis] == jd_UISizeRule_Grow) {
                             c->rect.max.val[axis] -= (f32)(over / grow_children);
@@ -564,7 +510,7 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
         
         jd_TreeTraversePreorder(b);
     }
-} 
+}
 
 void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
     jd_UIBoxRec* b = root;
@@ -572,20 +518,17 @@ void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
     f32 position = vp->position_offset.val[axis];
     
     while (b) {
-        f32 position = 0;
+        if (b->parent) position = b->parent->rect.min.val[axis];
+        
         for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
-            if (c->anchor_box) {
-                c->rect.min.val[axis] =  c->anchor_box->rect.min.val[axis];
-                c->rect.min.val[axis] += c->anchor_box->rect.max.val[axis] * c->anchor_reference_point.val[axis]; 
-                c->rect.min.val[axis] -= c->rect.max.val[axis] * c->reference_point.val[axis];
-            }
-            else if (c->fixed_position.val[axis] == 0) {
-                c->rect.min.val[axis] = (b->rect.min.val[axis] + position);
+            if (c->fixed_position.val[axis] == 0) {
+                c->rect.min.val[axis] = position;
                 if (axis == b->layout_axis)
                     position += c->rect.max.val[axis];
                 
+                c->rect.min.val[axis] = b->rect.min.val[axis] + c->rect.min.val[axis];
             } else {
-                c->rect.min.val[axis] = c->fixed_position.val[axis] - (c->rect.max.val[axis] * c->reference_point.val[axis]);
+                c->rect.min.val[axis] = c->fixed_position.val[axis];
             }
         }
         
@@ -595,14 +538,13 @@ void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
 
 void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root) {
     jd_UIBoxRec* b = root;
-    jd_UIViewport* vp = b->vp;
-    f64 dpi_sf = jd_WindowGetDPIScale(vp->window);
-    
     while (b) {
+        jd_UIViewport* vp = b->vp;
+        
+        f64 dpi_sf = jd_WindowGetDPIScale(vp->window);
+        
         jd_UIStyle* style = b->style;
         if (!style) style = &jd_default_style_dark;
-        
-        f32 z = (root == vp->popup_root_new) ? 0.0 : (1.0 / (b->draw_index + 1));
         
         jd_V4F color        = b->color;
         
@@ -610,44 +552,24 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root) {
         f32 corner_radius   = style->rounding;
         f32 thickness       = style->thickness;
         
-        jd_V3F rect_pos = {b->rect.min.x, b->rect.min.y, z};
+        jd_V2F rect_pos = b->rect.min;
         jd_V2F rect_size = b->rect.max;
         
-        jd_DrawRectWithZ(rect_pos, rect_size, color, corner_radius, softness, thickness);
-        if (b->text_edit) {
-            
-            jd_V2F string_pos = {rect_pos.x, rect_pos.y};
-            for (u32 i = 0; i < jd_UIAxis_Count; i++) {
-                if (b->size.rule[i] == jd_UISizeRule_FitText)
-                    string_pos.val[i] += b->style->label_padding.val[i] / 2.0f;
-            }
-            
-            
-            jd_V3F final_pos = {string_pos.x, string_pos.y, z};
-            jd_DrawStringWithZ(b->font_id, *b->text_box.string, final_pos, jd_TextOrigin_TopLeft, style->label_color, rect_size.x);
-            if (vp->last_active && b == vp->last_active) {
-                jd_V2F cur_pos2 = jd_CalcCursorPosUTF8(b->font_id, *b->text_box.string, b->rect.max.x, b->text_box.cursor);
-                jd_V3F cur_pos = {rect_pos.x + cur_pos2.x, rect_pos.y + cur_pos2.y, z};
-                b->text_box.last_cursor_pos = (jd_V2F){cur_pos2.x, cur_pos2.y};
-                jd_V2F cur_size = {2.0f, jd_FontGetLineHeightForCodepoint(b->font_id, 41)};
-                jd_DrawRectWithZ(cur_pos, cur_size, (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0.0, 0.0, 0.0);
-            }
-            
-        }
-        else if (b->label.count > 0) {
-            jd_V2F string_pos = {rect_pos.x, rect_pos.y};
+        jd_DrawRect(rect_pos, rect_size, color, corner_radius, softness, thickness);
+        if (b->label.count > 0) {
+            jd_String* font_id = jd_DArrayGetBack(_jd_internal_ui_state.font_id_stack);
+            jd_V2F string_pos = rect_pos;
             
             for (u32 i = 0; i < jd_UIAxis_Count; i++) {
                 if (b->size.rule[i] == jd_UISizeRule_FitText)
                     string_pos.val[i] += b->style->label_padding.val[i] / 2.0f;
             }
             
-            jd_V2F string_size = jd_CalcStringSizeUTF8(b->font_id, b->label, 0.0f);
+            f32 style_scaling = dpi_sf;
+            jd_V2F string_size = jd_CalcStringSizeUTF8(*font_id, b->label, 0.0f);
             string_pos.x += ((rect_size.x - string_size.x) * b->label_alignment.x);
             string_pos.y += ((rect_size.y - string_size.y) * b->label_alignment.y);
-            
-            jd_V3F final_pos = {string_pos.x, string_pos.y, z};
-            jd_DrawStringWithZ(b->font_id, b->label, final_pos, jd_TextOrigin_TopLeft, style->label_color, 0.0f);
+            jd_DrawString(*font_id, b->label, string_pos, jd_TextOrigin_TopLeft, style->label_color, 0.0f);
         }
         
         jd_TreeTraversePreorder(b);
@@ -655,7 +577,6 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root) {
 }
 
 void jd_UIEnd() {
-    u32 last_codepoint = 41; // Used to infer line height for cursor movement
     jd_UISeedPop();
     if (!_jd_internal_ui_state.arena) {
         jd_LogError("jd_UIEnd() called before jd_UIBegin()", jd_Error_APIMisuse, jd_Error_Fatal);
@@ -665,100 +586,12 @@ void jd_UIEnd() {
     
     jd_UIViewport* vp = jd_UIViewportGetCurrent();
     
-    jd_InputSliceForEach(i, vp->old_inputs) {
-        jd_InputEvent* e = jd_DArrayGetIndex(vp->old_inputs.array, i);
-        if (!e) { // Sanity Check
-            jd_LogError("Incorrect input slice range!", jd_Error_APIMisuse, jd_Error_Fatal);
-        }
-        
-        b8 text_edit_active = (vp->last_active && vp->last_active->text_edit);
-        
-        i64 delta = 0;
-        
-        if (text_edit_active) {
-            jd_UIBoxRec* b = vp->last_active;
-            switch (e->key) {
-                case jd_Key_Left: {
-                    if (jd_InputHasMod(e, jd_KeyMod_Ctrl)) {
-                        delta -= 5;
-                    } else {
-                        delta -= 1;
-                    }
-                } break;
-                
-                case jd_Key_Right: {
-                    if (jd_InputHasMod(e, jd_KeyMod_Ctrl)) {
-                        delta += 5;
-                    } else {
-                        delta += 1;
-                    }
-                } break;
-                
-                case jd_Key_Back: 
-                case jd_Key_Delete: {
-                    jd_UI_Internal_DeleteCodepoint(&b->text_box);
-                } break;
-                
-                case jd_Key_Up: 
-                case jd_Key_Down: {
-                    f32 line_adv = jd_FontGetLineAdvForCodepoint(b->font_id, last_codepoint);
-                    
-                    if (e->key == jd_Key_Up)
-                        line_adv = -line_adv;
-                    
-                    jd_V2F current_pos = b->text_box.last_cursor_pos;
-                    jd_V2F new_pos = {current_pos.x, current_pos.y + line_adv};
-                    u64 cursor = b->text_box.cursor;
-                    u64 new_cursor = jd_CalcCursorIndexUTF8(b->font_id, *b->text_box.string, b->rect.max.x, new_pos);
-                    i64 delta = new_cursor - cursor;
-                    
-                    jd_UnicodeSeekDeltaUTF8(*b->text_box.string, &cursor, delta);
-                    b->text_box.cursor = cursor;
-                } break;
-                
-                case jd_Key_Return: {
-                    jd_UI_Internal_InsertCodepoint(&b->text_box, 0x0A);
-                } break;
-                
-                case jd_Key_Tab: {
-                    //jd_UI_Internal_InsertCodepoint(&b->text_box, 0x09);
-                } break;
-                
-                default: {
-                    if (e->codepoint > 0) {
-                        jd_UI_Internal_InsertCodepoint(&b->text_box, e->codepoint);
-                        last_codepoint = e->codepoint;
-                    }
-                }
-            }
-        }
-        
-        if (delta != 0) {
-            jd_UIBoxRec* b = vp->last_active;
-            jd_UnicodeSeekDeltaUTF8(*b->text_box.string, &b->text_box.cursor, delta);
-        }
-        
-    }
-    
     {
         jd_UIBoxRec* b = vp->root_new;
         for (u64 i = 0; i < jd_UIAxis_Count; i++) {
             
             jd_UI_Internal_SolveFixedSizes(b, i);
             jd_UI_Internal_SolveGrowSizes(b, i);
-            jd_UI_Internal_SolvePctParentSizes(b, i);
-            jd_UI_Internal_SolveFitChildrenSizes(b, i);
-            jd_UI_Internal_SolveConflicts(b, i);
-            jd_UI_Internal_PositionBoxes(b, i);
-        }
-        jd_UI_Internal_RenderBoxes(b);
-    }
-    
-    {
-        jd_UIBoxRec* b = vp->popup_root_new;
-        for (u64 i = 0; i < jd_UIAxis_Count; i++) {
-            
-            jd_UI_Internal_SolveFixedSizes(b, i);
             jd_UI_Internal_SolvePctParentSizes(b, i);
             jd_UI_Internal_SolveFitChildrenSizes(b, i);
             jd_UI_Internal_SolveConflicts(b, i);
@@ -814,31 +647,14 @@ jd_UIViewport* jd_UIInitForWindow(jd_Window* window) {
 
 //~ User-facing functions
 
-jd_UIResult jd_UILabel(jd_String label) {
-    jd_UIBoxConfig config = {0};
-    config.clickable = false;
-    config.string_id = _jd_UIStringGetHashPart(label);
-    config.label = _jd_UIStringGetDisplayPart(label);
-    config.size.rule[jd_UIAxis_X] = jd_UISizeRule_FitText;
-    config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_FitText;
-    config.cursor = jd_Cursor_Default;
-    config.static_color = true;
-    
-    jd_UIResult result = jd_UIBoxBegin(&config);
-    jd_UIBoxEnd();
-    
-    return result;
-}
-
 jd_UIResult jd_UILabelButton(jd_String label) {
     jd_UIBoxConfig config = {0};
     config.clickable = true;
-    config.string_id = _jd_UIStringGetHashPart(label);
-    config.label = _jd_UIStringGetDisplayPart(label);
+    config.string_id = label;
+    config.label = label;
     config.size.rule[jd_UIAxis_X] = jd_UISizeRule_FitText;
     config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_FitText;
     config.cursor = jd_Cursor_Hand;
-    config.match_siblings_offaxis = true;
     
     jd_UIResult result = jd_UIBoxBegin(&config);
     jd_UIBoxEnd();
@@ -849,8 +665,8 @@ jd_UIResult jd_UILabelButton(jd_String label) {
 jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment) {
     jd_UIBoxConfig config = {0};
     config.clickable = true;
-    config.string_id =  _jd_UIStringGetHashPart(label);
-    config.label = _jd_UIStringGetDisplayPart(label);
+    config.string_id = label;
+    config.label = label;
     config.size.rule[jd_UIAxis_X] = jd_UISizeRule_Fixed;
     config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_Fixed;
     config.size.fixed_size = size;
@@ -866,8 +682,8 @@ jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alig
 jd_UIResult jd_UIButton(jd_String label, jd_UISize size, b8 act_on_click, b8 static_color) {
     jd_UIBoxConfig config = {0};
     config.clickable = true;
-    config.string_id =  _jd_UIStringGetHashPart(label);
-    config.label = _jd_UIStringGetDisplayPart(label);
+    config.string_id = label;
+    config.label = label;
     config.size = size;
     config.cursor = jd_Cursor_Hand;
     config.label_alignment = (jd_V2F){0.5f, 0.5f};
@@ -895,49 +711,6 @@ jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize s
     jd_UIResult result = jd_UIBoxBegin(&config);
     
     return result;
-}
-
-jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable) {
-    jd_UIBoxConfig config = {0};
-    config.clickable = clickable;
-    if (config.clickable)
-        config.act_on_click = true;
-    config.string_id  = string_id;
-    config.layout.dir = dir;
-    config.anchor_box = anchor_box;
-    config.anchor_reference_point = anchor_to;
-    config.reference_point = anchor_from;
-    config.layout.gap = gap;
-    config.size = size;
-    config.static_color = true;
-    config.cursor = jd_Cursor_Default;
-    config.style = style;
-    
-    jd_UIResult result = jd_UIBoxBegin(&config);
-    
-    return result;
-}
-
-jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size) {
-    jd_UIBoxConfig config = {0};
-    config.clickable = true;
-    config.string_id  = string_id;
-    config.size = size;
-    config.static_color = true;
-    config.cursor = jd_Cursor_Default;
-    config.style = style;
-    config.text_edit = true;
-    config.text_box = (jd_UITextBox){ .string = string, .max = max_string_size };
-    
-    jd_UIResult result = jd_UIBoxBegin(&config);
-    jd_UIBoxEnd();
-    
-    return result;
-}
-
-jd_UIBoxRec* jd_UIGetLastBox() {
-    jd_UIViewport* vp = jd_UIViewportGetCurrent();
-    return vp->builder_last_box;
 }
 
 void jd_UIRegionEnd() {

@@ -236,6 +236,7 @@ void jd_WindowDrawFPS(jd_Window* window, jd_TextOrigin origin, jd_V2F pos) {
     jd_DrawStringWithBG(jd_StrLit("OS_BaseFontWindows"), jd_DStringGet(window->fps_counter_string), pos, origin, (jd_V4F){1.0, 1.0, 1.0, 1.0}, (jd_V4F){.2, 0.2, 0.2, 0.65}, 1280.0f, 0.0f, 0.0f, 0.0f);
 }
 
+
 void jd_AppUpdatePlatformWindows(jd_App* app) {
     jd_UserLockGet(app->lock);
     static u64 reload_delay = 0;
@@ -957,32 +958,14 @@ LRESULT CALLBACK jd_WindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPA
         case WM_KEYDOWN:
         case WM_KEYUP: {
             
-            if (w_param  < jd_Key_Back) break;
+            if (w_param  < jd_Key_Tab) break;
             if (w_param >= jd_Key_Shift && w_param <= jd_Key_Menu) break;
             if (w_param >= jd_Key_LShift && w_param <= jd_Key_RMenu) break;
             
             e.release_event = (l_param & (1 << 31));
             
             if (w_param < jd_Key_Count) {
-                
-                if (msg == WM_KEYDOWN) {
-                    u16 uni[3] = {0};
-                    u32 flags = (1 << 2);
-                    
-                    u16 key_flags = HIWORD(l_param);
-                    u8  scancode = LOBYTE(key_flags);
-                    u8 kb_state[256] = {0};
-                    
-                    GetKeyboardState(kb_state);
-                    
-                    e,scancode = scancode;
-                    e.key = w_param;
-                    
-                    u32 count = ToUnicodeEx(e.key, e.scancode, kb_state, uni, 3, flags, 0);
-                    u32 codepoint = jd_UnicodeDecodeUTF16Codepoint(uni, count);
-                    e.codepoint = codepoint;
-                }
-                
+                e.key = w_param;
             }
             
             _jd_GetMods(&e);
@@ -1078,8 +1061,4 @@ b32 jd_AppWindowIsActive(jd_Window* window) {
     HWND handle = GetActiveWindow();
     if (window->handle != handle) return false;
     else return true;
-}
-
-f32 jd_WindowGetFrameTime(jd_Window* window) {
-    return window->frame_time;
 }

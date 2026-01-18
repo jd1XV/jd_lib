@@ -8,7 +8,8 @@
 #endif
 
 typedef struct jd_UITag {
-    u32  key;
+    u32 key;
+    u32 seed;
 } jd_UITag;
 
 typedef struct jd_UIStyle {
@@ -52,6 +53,7 @@ typedef enum jd_UISizeRule {
     jd_UISizeRule_Count
 } jd_UISizeRule;
 
+
 typedef struct jd_UISize {
     jd_UISizeRule rule[2];
     jd_V2F fixed_size;
@@ -59,41 +61,24 @@ typedef struct jd_UISize {
     jd_V2F pct_of_parent;
 } jd_UISize;
 
-typedef struct jd_UITextBox {
-    u64 cursor;
-    u64 selection;
-    jd_V2F last_cursor_pos;
-    
-    jd_String* string;
-    u64 max;
-} jd_UITextBox;
 
 typedef struct jd_UIBoxRec {
     jd_UITag   tag;
-    jd_String  string_id;
     jd_RectF32 rect;
     jd_V2F     pos; // platform window space
     jd_V2F     label_alignment;
     jd_String  label;
-    jd_String  font_id;
+    jd_String* font_id;
     jd_V4F     color;
-    jd_Cursor  cursor;
-    
-    u32 draw_index;
-    
-    b8           text_edit;
-    jd_UITextBox text_box;
     
     jd_UISize size;
+    jd_V2F calculated_size;
+    jd_V2F calculated_remaining;
+    
+    jd_Cursor cursor;
+    
     jd_UIAxis layout_axis;
     jd_V2F    fixed_position;
-    jd_V2F    reference_point;
-    
-    b8 match_siblings_offaxis;
-    
-    struct jd_UIBoxRec* anchor_box;
-    
-    jd_V2F anchor_reference_point;
     
     struct jd_UIStyle* style;
     struct jd_UILayout* layout;
@@ -125,13 +110,9 @@ typedef struct jd_UIViewport {
     
     jd_UIBoxRec* builder_parent;
     
-    jd_UIBoxRec* builder_last_box;
-    
     jd_Window* window;
     
     b32 roots_init;
-    
-    u32 box_count;
     
     jd_InputEventSlice new_inputs;
     jd_InputEventSlice old_inputs;
@@ -143,8 +124,6 @@ typedef struct jd_UIResult {
     b8 l_clicked;
     b8 r_clicked;
     b8 m_clicked;
-    
-    b8 last_active;
     
     b8 control_clicked;
     b8 alt_clicked;
@@ -164,11 +143,6 @@ typedef struct jd_UIBoxConfig {
     jd_UISize     size;
     jd_UILayout   layout;
     jd_V2F        fixed_position;
-    jd_V2F        reference_point; // 0, 0 = Top Left TODO: Rethink the names of (probably) most things in this struct, especially this.
-    b8            match_siblings_offaxis; // Useful hack for menu buttons that should be as long as their longest sibling
-    
-    jd_UIBoxRec*  anchor_box;
-    jd_V2F        anchor_reference_point;
     
     jd_String     label;
     jd_V2F        label_alignment;
@@ -183,8 +157,6 @@ typedef struct jd_UIBoxConfig {
     b8            disabled;
     b8            label_selectable;
     jd_Cursor     cursor;
-    b8            text_edit;
-    jd_UITextBox  text_box;
     
     // TODO: Texture information? I feel like there's no reason to not have it this low level with this design,
     // and it makes textured rectangles a first class citizen. Thereotically, with the right application of these
@@ -209,13 +181,9 @@ jd_ExportFn jd_ForceInline void jd_UIFontPop();
 jd_ExportFn jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent();
 jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box);
 jd_ExportFn jd_UIResult jd_UIButton(jd_String label, jd_UISize size, b8 act_on_click, b8 static_color);
-jd_ExportFn jd_UIResult jd_UILabel(jd_String label);
 jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label);
 jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
 jd_ExportFn jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
-jd_ExportFn jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
-jd_ExportFn jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size);
-jd_ExportFn jd_UIBoxRec* jd_UIGetLastBox();
 jd_ExportFn void        jd_UIRegionEnd();
 
 static jd_UIStyle jd_default_style_dark = {

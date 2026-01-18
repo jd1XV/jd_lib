@@ -37,11 +37,7 @@ typedef struct jd_UTFDecodedString {
 
 jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf, jd_String input, b32 validate);
 jd_String jd_UnicodeEncodeUTF32toUTF8(jd_Arena* arena, jd_UTFDecodedString input, b32 validate);
-jd_ForceInline u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index);
-u32 jd_UnicodeDecodeUTF16Codepoint(u16* buf, u32 count);
-u32 jd_UnicodeUTF16toUTF8(u16 wide[2], u32 wide_count, c8* buffer, u32 buf_size);
-u32 jd_UnicodeUTF32toUTF8(u32 codepoint, c8* buffer, u32 buf_size);
-void jd_UnicodeSeekDeltaUTF8(jd_String string, u64* index, i64 delta);
+jd_ForceInline u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64* index);
 
 #ifdef JD_IMPLEMENTATION
 #include "jd_unicode.c"

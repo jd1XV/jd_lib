@@ -42,8 +42,6 @@ jd_ExportFn jd_V2F jd_WindowGetDrawOrigin(jd_Window* window);
 jd_ExportFn jd_V2F jd_WindowGetScaledSize(jd_Window* window);
 jd_ExportFn f64 jd_WindowGetDPIScale(jd_Window* window);
 
-jd_ExportFn f32 jd_WindowGetFrameTime(jd_Window* window);
-
 typedef struct jd_App jd_App;
 jd_App* jd_AppCreate(struct jd_AppConfig* config);
 

@@ -28,7 +28,7 @@ inline u8* _jd_Internal_ArenaReserve(u64 reserve, u64 commit_block_size) {
 }
 
 inline void _jd_Internal_ArenaCommit(jd_Arena* arena, u64 size) {
-    VirtualAlloc(arena->mem + arena->commit_pos, size, MEM_COMMIT, PAGE_READWRITE); 
+    VirtualAlloc(arena->mem + arena->commit_pos, size, MEM_COMMIT, PAGE_READWRITE);
 }
 
 inline void _jd_Internal_ArenaDecommit(jd_Arena* arena, u64 pos, u64 size) {
@@ -36,7 +36,7 @@ inline void _jd_Internal_ArenaDecommit(jd_Arena* arena, u64 pos, u64 size) {
 }
 
 jd_Arena* jd_ArenaCreate(u64 capacity, u64 commit_page_size) {
-    if (capacity == 0) capacity = GIGABYTES(2);
+    if (capacity == 0) capacity = GIGABYTES(8);
     capacity = jd_Max(capacity, KILOBYTES(64));
     commit_page_size = jd_Max(commit_page_size, KILOBYTES(4));
     

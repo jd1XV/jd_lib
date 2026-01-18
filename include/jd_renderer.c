@@ -29,7 +29,7 @@ jd_String vs_string = jd_StrConst("#version 430\n"
                                   "void main(){\n"
                                   "    gl_Position.x = (vert_xyz.x * screen_conv.x) - 1;\n"
                                   "    gl_Position.y = 1 - (vert_xyz.y * screen_conv.y);\n"
-                                  "    gl_Position.z = vert_xyz.z;\n"
+                                  "    gl_Position.z = 0;\n"
                                   "    gl_Position.w = 1;\n"
                                   "    fs_uvw = vert_uvw;\n"
                                   "    fs_col = vert_col;\n"
@@ -478,12 +478,12 @@ jd_ForceInline void jd_TextureQueue(jd_2DTexture* texture) {
     texture->bound = true;
 }
 
-b32 jd_Internal_DrawGlyph(jd_Font* font, jd_V3F window_pos, jd_V4F col, jd_Glyph* g, f32* advance_out) {
+b32 jd_Internal_DrawGlyph(jd_Font* font, jd_V2F window_pos, jd_V4F col, jd_Glyph* g, f32* advance_out) {
     jd_Renderer* renderer = jd_RendererGet();
     f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)g->face->dpi);
     f32 x = window_pos.x;
     f32 y = window_pos.y;
-    f32 z = window_pos.z;
+    f32 z = 0.0f;
     
     jd_V3F tx = { g->size.x * (1.0f / (f32)g->texture->res.x), g->size.y * (1.0f / (f32)g->texture->res.y), g->layer_index };
     
@@ -577,12 +577,12 @@ jd_V2F jd_CalcStringBoxMax(jd_String font_id, jd_V2F starting_pos, jd_UTFDecoded
     if (!wrap) {
         for (u64 i = 0; i < utf32_string.count && max.x < window_bb.x; i++) {
             if (utf32_string.utf32[i] == 0x0a) {
-                max.y += font->faces[0].line_adv * dpi_scaling;
-                pos.x = starting_pos.x;
                 continue;
             }
             
             if (utf32_string.utf32[i] == 0x0d) {
+                max.y += font->faces[0].line_adv * dpi_scaling;
+                pos.x = starting_pos.x;
                 continue;
             }
             
@@ -600,12 +600,12 @@ jd_V2F jd_CalcStringBoxMax(jd_String font_id, jd_V2F starting_pos, jd_UTFDecoded
     }  else {
         for (u64 i = 0; i < utf32_string.count && max.y < window_bb.y; i++) {
             if (utf32_string.utf32[i] == 0x0a) {
-                max.y += font->faces[0].line_adv * dpi_scaling;
-                pos.x = starting_pos.x;
                 continue;
             }
             
             if (utf32_string.utf32[i] == 0x0d) {
+                max.y += font->faces[0].line_adv * dpi_scaling;
+                pos.x = starting_pos.x;
                 continue;
             }
             
@@ -719,212 +719,6 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
     return size;
 }
 
-u64 jd_CalcCursorIndex(jd_String font_id, jd_UTFDecodedString utf32_string, f32 wrap_width, jd_V2F desired_pos) {
-    u64 index = 0;
-    
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_Font* font = jd_FontGetByID(font_id);
-    jd_Glyph* fallback = jd_FontGetGlyph(font, '?');
-    
-    jd_V2F pos = {0};
-    
-    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)fallback->face->dpi);
-    
-    f32 line_adv = fallback->face->line_adv;
-    
-    b8 wrap = (wrap_width > 0.0f);
-    
-    u64 i = 0;
-    
-    b8 y_match_found = 0;
-    
-    if (!wrap) {
-        for (; i < utf32_string.count; i++) {
-            if (utf32_string.utf32[i] == 0x0a) {
-                pos.x = 0.0f;
-                pos.y += fallback->face->line_adv * dpi_scaling;
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0x0d) {
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0) {
-                continue;
-            }
-            
-            jd_Glyph* g = jd_FontGetGlyph(font, utf32_string.utf32[i]);
-            if (!g || g->codepoint == 0) {
-                g = fallback;
-            }
-            
-            pos.x += g->h_advance * dpi_scaling;
-            
-            if (pos.x >= desired_pos.x) {
-                break;
-            }
-        }
-    }  else {
-        for (; i < utf32_string.count; i++) {
-            jd_Glyph* g = jd_FontGetGlyph(font, utf32_string.utf32[i]);
-            if (!g || g->codepoint == 0) {
-                g = fallback;
-            }
-            
-            f32 off_x = desired_pos.x - pos.x;
-            f32 off_y = desired_pos.y - pos.y;
-            
-            f32 off_x_abs = jd_F32Abs(off_x);
-            f32 off_y_abs = jd_F32Abs(off_y);
-            
-            if (off_y_abs <= (line_adv * dpi_scaling * 0.5) ) {
-                y_match_found = true;
-            }
-            
-            if (i == 0 && desired_pos.y < pos.y) { // If on the first glyph we are out of bounds to the top, set the cursor to the start of the string
-                i = 0;
-                return i;
-            }
-            
-            if ((off_x_abs <= (g->h_advance * dpi_scaling * 0.5)) && y_match_found) {
-                jd_ClampToRange(i, 0, utf32_string.count);
-                break;
-            }
-            
-            if (utf32_string.utf32[i] == 0x0a) {
-                if (y_match_found) {
-                    break;
-                }
-                pos.x = 0.0f;
-                pos.y += line_adv * dpi_scaling;
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0x0d) {
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0) {
-                continue;
-            }
-            
-            f32 adv = g->h_advance;
-            
-            if (pos.x + (adv * dpi_scaling) > wrap_width) {
-                pos.y += line_adv * dpi_scaling;
-                pos.x = 0.0f;
-                
-            } else {
-                pos.x += adv * dpi_scaling;
-            }
-            
-        }
-    }
-    
-    return i;
-}
-
-jd_V2F jd_CalcCursorPos(jd_String font_id, jd_UTFDecodedString utf32_string, f32 wrap_width, u64 cursor_index) {
-    u64 index = 0;
-    jd_V2F pos = {0};
-    
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_Font* font = jd_FontGetByID(font_id);
-    jd_Glyph* fallback = jd_FontGetGlyph(font, '?');
-    
-    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)fallback->face->dpi);
-    
-    f32 line_adv = fallback->face->line_adv;
-    
-    jd_V2F size = jd_V2F(0.0, 0.0);
-    
-    b8 wrap = (wrap_width > 0.0f);
-    
-    b8 end = cursor_index == utf32_string.count;
-    
-    f32 last_char_adv = 0.0f;
-    
-    if (!wrap) {
-        for (u64 i = 0; i < jd_Min(cursor_index, utf32_string.count); i++) {
-            if (utf32_string.utf32[i] == 0x0a) {
-                pos.x = 0.0f;
-                pos.y += fallback->face->line_adv * dpi_scaling;
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0x0d) {
-                continue;
-            }
-            if (utf32_string.utf32[i] == 0) {
-                continue;
-            }
-            
-            jd_Glyph* g = jd_FontGetGlyph(font, utf32_string.utf32[i]);
-            if (!g || g->codepoint == 0) {
-                g = fallback;
-            }
-            
-            pos.x += g->h_advance * dpi_scaling;
-        }
-    }  else {
-        for (u64 i = 0; i < jd_Min(cursor_index, utf32_string.count); i++) {
-            if (utf32_string.utf32[i] == 0x0a) {
-                pos.x = 0.0f;
-                pos.y += line_adv * dpi_scaling;
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0x0d) {
-                continue;
-            }
-            
-            if (utf32_string.utf32[i] == 0) {
-                continue;
-            }
-            
-            jd_Glyph* g = jd_FontGetGlyph(font, utf32_string.utf32[i]);
-            if (!g || g->codepoint == 0) {
-                g = fallback;
-            }
-            
-            f32 adv = g->h_advance;
-            
-            last_char_adv = adv * dpi_scaling;
-            
-            if (pos.x + (adv * dpi_scaling) > wrap_width) {
-                pos.y += line_adv * dpi_scaling;
-                pos.x = 0.0f;
-                pos.x += last_char_adv;
-            } else {
-                pos.x += adv * dpi_scaling;
-            }
-        }
-        
-    }
-    
-    return pos;
-}
-
-u64 jd_CalcCursorIndexUTF8(jd_String font_id, jd_String str, f32 wrap_width, jd_V2F desired_pos) {
-    jd_Renderer* renderer = jd_RendererGet();
-    if (!str.count) return 0;
-    jd_ScratchArena scratch = jd_ScratchArenaCreate(renderer->frame_arena);
-    jd_UTFDecodedString utf32 = jd_UnicodeDecodeUTF8String(scratch.arena, jd_UnicodeTF_UTF32, str, false);
-    u64 index = jd_CalcCursorIndex(font_id, utf32, wrap_width, desired_pos);
-    jd_ScratchArenaRelease(scratch);
-    return index;
-}
-
-jd_V2F jd_CalcCursorPosUTF8(jd_String font_id, jd_String str, f32 wrap_width, u64 cursor_index) {
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_ScratchArena scratch = jd_ScratchArenaCreate(renderer->frame_arena);
-    jd_UTFDecodedString utf32 = jd_UnicodeDecodeUTF8String(scratch.arena, jd_UnicodeTF_UTF32, str, false);
-    jd_V2F pos = jd_CalcCursorPos(font_id, utf32, wrap_width, cursor_index);
-    jd_ScratchArenaRelease(scratch);
-    return pos;
-}
-
 jd_V2F jd_CalcStringSizeUTF8(jd_String font_id, jd_String str, f32 wrap_width) {
     jd_Renderer* renderer = jd_RendererGet();
     jd_ScratchArena scratch = jd_ScratchArenaCreate(renderer->frame_arena);
@@ -934,17 +728,17 @@ jd_V2F jd_CalcStringSizeUTF8(jd_String font_id, jd_String str, f32 wrap_width) {
     return ss;
 }
 
-void jd_DrawStringUTF32(jd_String font_id, jd_UTFDecodedString utf32_string, jd_V3F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width) {
+void jd_DrawStringUTF32(jd_String font_id, jd_UTFDecodedString utf32_string, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width) {
     jd_Renderer* renderer = jd_RendererGet();
     jd_Font* font = jd_FontGetByID(font_id);
     f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     jd_Glyph* fallback = jd_FontGetGlyph(font, '?');
-    jd_V3F pos = window_pos;
+    jd_V2F pos = window_pos;
     
     pos.x *= renderer->dpi_scaling;
     pos.y *= renderer->dpi_scaling;
     
-    jd_V2F starting_pos = {pos.x, pos.y};
+    jd_V2F starting_pos = pos;
     
     jd_V4F supplied_color = color;
     jd_V4F glyph_color = supplied_color;
@@ -996,7 +790,7 @@ void jd_DrawStringUTF32(jd_String font_id, jd_UTFDecodedString utf32_string, jd_
         f32 adv = glyph->h_advance;
         
         if (wrap) {
-            if ((pos.x - starting_pos.x) + (adv * dpi_scaling) > wrap_width) {
+            if ((pos.x - starting_pos.x) + adv > wrap_width) {
                 pos.x = starting_pos.x;
                 pos.y += font->faces[0].line_adv * dpi_scaling;
                 //pos.y += glyph->face->descent * dpi_scaling;
@@ -1011,13 +805,6 @@ void jd_DrawStringUTF32(jd_String font_id, jd_UTFDecodedString utf32_string, jd_
 }
 
 void jd_DrawString(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width) {
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_UTFDecodedString utf32_string = jd_UnicodeDecodeUTF8String(renderer->frame_arena, jd_UnicodeTF_UTF32, str, false);
-    jd_V3F pos = {window_pos.x, window_pos.y, 0.0f};
-    jd_DrawStringUTF32(font_id, utf32_string, pos, baseline, color, wrap_width);
-}
-
-void jd_DrawStringWithZ(jd_String font_id, jd_String str, jd_V3F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width) {
     jd_Renderer* renderer = jd_RendererGet();
     jd_UTFDecodedString utf32_string = jd_UnicodeDecodeUTF8String(renderer->frame_arena, jd_UnicodeTF_UTF32, str, false);
     jd_DrawStringUTF32(font_id, utf32_string, window_pos, baseline, color, wrap_width);
@@ -1045,111 +832,8 @@ void jd_DrawStringWithBG(jd_String font_id, jd_String str, jd_V2F window_pos, jd
         }
     }
     
-    jd_V3F pos = {window_pos.x, window_pos.y, 0.0f};
     jd_DrawRect(box_pos, max, bg_color, box_rounding, box_softness, thickness);
-    jd_DrawStringUTF32(font_id, utf32_string, pos, baseline, text_color, wrap_width);
-}
-
-f32 jd_FontGetLineAdvForCodepoint(jd_String font_id, u32 codepoint) {
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_Font* font = jd_FontGetByID(font_id);
-    jd_Glyph* g = jd_FontGetGlyph(font, codepoint);
-    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)g->face->dpi);
-    f32 line_adv = g->face->line_adv * dpi_scaling;
-    return line_adv;
-}
-
-f32 jd_FontGetLineHeightForCodepoint(jd_String font_id, u32 codepoint) {
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_Font* font = jd_FontGetByID(font_id);
-    jd_Glyph* g = jd_FontGetGlyph(font, codepoint);
-    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)g->face->dpi);
-    f32 height = g->face->ascent + g->face->descent;
-    return height;
-}
-
-void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness) {
-    jd_Renderer* renderer = jd_RendererGet();
-    f32 x = window_pos.x * renderer->dpi_scaling;
-    f32 y = window_pos.y * renderer->dpi_scaling;
-    f32 z = window_pos.z;
-    
-    f32 dpi_scaling = renderer->dpi_scaling;
-    
-    jd_RectF32 rect = {0};
-    rect.min.x = x;
-    rect.min.y = y;
-    rect.max.x = x + (size.x * dpi_scaling);
-    rect.max.y = y + (size.y * dpi_scaling);
-    
-    if (jd_internal_rectangle_texture == 0) { // realistically this should pretty much never occur
-        jd_2DTexture* tex = jd_TexturePoolAddTexture((jd_V2U){256, 256}, 4, jd_2DTextureMode_Font);
-        jd_internal_rectangle_texture = tex;
-        u8* white_bitmap = jd_HeapAlloc(sizeof(u32) * 256 * 256);
-        jd_MemSet(white_bitmap, 0xFF, sizeof(u32) * 256 * 256);
-        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 256, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, white_bitmap);
-        tex->used_slots++;
-    }
-    
-    
-    jd_V4F inst_rect = {
-        .x0 = rect.min.x, 
-        .y0 = rect.min.y,
-        .x1 = rect.max.x,
-        .y1 = rect.max.y
-    };
-    
-    
-    jd_GLVertex top_right = {
-        .pos = { rect.max.x, rect.max.y, z },
-        .tx = {1.0f, 1.0f, 0.0f},
-        .col = col,
-        .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
-    };
-    
-    jd_GLVertex bottom_right = {
-        .pos = { rect.max.x, rect.min.y, z },
-        .tx = {1.0f, 0.0f, 0.0f},
-        .col = col,
-        .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
-    };
-    
-    jd_GLVertex bottom_left = {
-        .pos = { rect.min.x, rect.min.y, z },
-        .tx = {0.0f, 0.0f, 0.0f},
-        .col = col,
-        .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
-    };
-    
-    jd_GLVertex top_left = {
-        .pos = { rect.min.x, rect.max.y, z },
-        .tx = {0.0f, 1.0f, 0.0f},
-        .col = col,
-        .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
-    };
-    
-    jd_DArray* vertices = jd_internal_rectangle_texture->vertices;
-    
-    jd_DArrayPushBack(vertices, &top_right);
-    jd_DArrayPushBack(vertices, &bottom_right);
-    jd_DArrayPushBack(vertices, &bottom_left);
-    jd_DArrayPushBack(vertices, &bottom_left);
-    jd_DArrayPushBack(vertices, &top_left);
-    jd_DArrayPushBack(vertices, &top_right);
-    
-    jd_TextureQueue(jd_internal_rectangle_texture);
+    jd_DrawStringUTF32(font_id, utf32_string, window_pos, baseline, text_color, wrap_width);
 }
 
 void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness) {
@@ -1174,6 +858,7 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
         glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 256, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, white_bitmap);
         tex->used_slots++;
     }
+    
     
     jd_V4F inst_rect = {
         .x0 = rect.min.x, 
@@ -1260,9 +945,6 @@ void jd_RendererInit() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    
     glBindVertexArray(objects->vao);
     glBindBuffer(GL_ARRAY_BUFFER, objects->vbo);
     
@@ -1311,7 +993,7 @@ void jd_RendererBegin(jd_V2F render_size) {
     jd_RendererGet()->render_size = render_size;
     glViewport(0, 0, render_size.w, render_size.h);
     glClearColor(0.33f, 0.33f, 0.33f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 void jd_RendererDraw() {
