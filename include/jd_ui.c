@@ -62,6 +62,10 @@ jd_ExportFn jd_ForceInline void jd_UISeedPushTag(jd_UITag tag) {
     jd_DArrayPushBack(_jd_internal_ui_state.seeds, &tag.key);
 }
 
+jd_ExportFn jd_ForceInline void jd_UISeedPushU32(u32 v) {
+    jd_DArrayPushBack(_jd_internal_ui_state.seeds, &v);
+}
+
 jd_ExportFn jd_ForceInline void jd_UISeedPop() {
 #ifdef JD_DEBUG
     if (!_jd_internal_ui_state.seeds->count)
@@ -74,7 +78,6 @@ jd_ExportFn jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
     jd_UIBoxRec* b = &(_jd_internal_ui_state.box_array[tag.key % _jd_internal_ui_state.box_array_size]);
     if (b->tag.key == 0) {
         b->tag.key = tag.key;
-        int x = 0;
         return b;
     }
     
@@ -172,8 +175,6 @@ void jd_UIPickActiveBox(jd_UIViewport* vp) {
             jd_LogError("Incorrect input slice range!", jd_Error_APIMisuse, jd_Error_Fatal);
         }
         
-        b8 text_edit_active = (vp->last_active && vp->last_active->text_edit);
-        
         i64 delta = 0;
         
         switch (e->key) {
@@ -251,8 +252,8 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
         //jd_LogError("No style specified! Using default style", jd_Error_APIMisuse, jd_Error_Warning);
     }
     
-    b8 act_on_click = config->act_on_click;
-    b8 clickable    = config->clickable;
+    b8 act_on_click = (config->flags & jd_UIBoxFlags_ActOnClick);
+    b8 clickable    = (config->flags & jd_UIBoxFlags_Clickable);
     
     jd_UITag tag = jd_UITagFromString(config->string_id);
     jd_UIBoxRec* b = jd_UIBoxGetByTag(tag);
@@ -276,10 +277,10 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     vp->box_count++;
     
     // input handling
-    if (!config->disabled) {
+    if (!(config->flags & jd_UIBoxFlags_Disabled)) {
         if (b == vp->hot) {
             result.hovered = true;
-            if (!config->static_color)
+            if (!(config->flags & jd_UIBoxFlags_StaticColor))
                 color = hovered_color;
             
         }
@@ -308,7 +309,7 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
                 }
             }
             
-            if (!config->static_color)
+            if (!(config->flags & jd_UIBoxFlags_StaticColor))
                 color = active_color;
         }
         
@@ -345,11 +346,11 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     }
     
     b->style = style;
-    b->text_edit = config->text_edit;
+    b->flags = config->flags;
     b->text_box.string  = config->text_box.string;
     if (config->text_box.string && config->text_box.string->count < b->text_box.cursor) b->text_box.cursor = 0;
     
-    b->text_box.max     = config->text_box.max;
+    b->text_box.max = config->text_box.max;
     b->fixed_position = config->fixed_position;
     b->anchor_box = config->anchor_box;
     b->label = config->label;
@@ -362,7 +363,6 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     b->size = config->size;
     b->font_id = *(jd_String*)jd_DArrayGetBack(_jd_internal_ui_state.font_id_stack);
     b->cursor = config->cursor;
-    b->match_siblings_offaxis = config->match_siblings_offaxis;
     
     jd_TreeLinkLastChild(parent, b);
     
@@ -517,15 +517,18 @@ void jd_UI_Internal_SolveFitChildrenSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
 void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
     jd_UIBoxRec* b = root;
     while (b) {
+        f32 size = 0.0f;
         f32 allowed_size = b->rect.max.val[axis];
         
         for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
             if (axis != b->layout_axis) {
-                if (c->match_siblings_offaxis) {
+                if (c->flags & jd_UIBoxFlags_MatchSiblingsOffAxis) {
                     c->rect.max.val[axis] = allowed_size;
                 } else {
                     c->rect.max.val[axis] = jd_Min(c->rect.max.val[axis], allowed_size);
                 }
+                
+                size = jd_Max(c->rect.max.val[axis], size);
             }
             
             else {
@@ -551,8 +554,9 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
                         }
                     }
                 }
-                
             }
+            
+            size += c->rect.max.val[axis];
             
         }
         
@@ -561,6 +565,8 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
                 c->rect.max.val[axis] = b->rect.max.val[axis] * c->size.pct_of_parent.val[axis];
             }
         }
+        
+        b->scroll_max.val[axis] = size;
         
         jd_TreeTraversePreorder(b);
     }
@@ -587,7 +593,12 @@ void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
             } else {
                 c->rect.min.val[axis] = c->fixed_position.val[axis] - (c->rect.max.val[axis] * c->reference_point.val[axis]);
             }
+            
+            if (b->flags & (jd_UIBoxFlags_ScrollX << axis)) {
+                c->rect.min.val[axis] -= b->scroll.val[axis];
+            }
         }
+        
         
         jd_TreeTraversePreorder(b);
     }
@@ -613,8 +624,22 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root) {
         jd_V3F rect_pos = {b->rect.min.x, b->rect.min.y, z};
         jd_V2F rect_size = b->rect.max;
         
-        jd_DrawRectWithZ(rect_pos, rect_size, color, corner_radius, softness, thickness);
-        if (b->text_edit) {
+        jd_RectF32 clipping_rectangle_self = {
+            .min = b->rect.min,
+            .max = {b->rect.min.x + b->rect.max.x, b->rect.min.y + b->rect.max.y}
+        };
+        
+        jd_RectF32 clipping_rectangle_parent = {0};
+        if (b->parent) {
+            clipping_rectangle_parent.min = b->parent->rect.min;
+            clipping_rectangle_parent.max = (jd_V2F){b->parent->rect.min.x + b->parent->rect.max.x, b->parent->rect.min.y + b->parent->rect.max.y};
+        } else {
+            clipping_rectangle_parent = clipping_rectangle_self;
+        }
+        
+        jd_DrawRectWithZ(rect_pos, rect_size, color, corner_radius, softness, thickness, clipping_rectangle_parent);
+        if (b->flags & jd_UIBoxFlags_TextEdit) {
+            jd_V2F string_size = jd_CalcStringSizeUTF8(b->font_id, *b->text_box.string, b->rect.max.x);
             
             jd_V2F string_pos = {rect_pos.x, rect_pos.y};
             for (u32 i = 0; i < jd_UIAxis_Count; i++) {
@@ -622,17 +647,29 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root) {
                     string_pos.val[i] += b->style->label_padding.val[i] / 2.0f;
             }
             
-            
-            jd_V3F final_pos = {string_pos.x, string_pos.y, z};
-            jd_DrawStringWithZ(b->font_id, *b->text_box.string, final_pos, jd_TextOrigin_TopLeft, style->label_color, rect_size.x);
-            if (vp->last_active && b == vp->last_active) {
-                jd_V2F cur_pos2 = jd_CalcCursorPosUTF8(b->font_id, *b->text_box.string, b->rect.max.x, b->text_box.cursor);
-                jd_V3F cur_pos = {rect_pos.x + cur_pos2.x, rect_pos.y + cur_pos2.y, z};
-                b->text_box.last_cursor_pos = (jd_V2F){cur_pos2.x, cur_pos2.y};
-                jd_V2F cur_size = {2.0f, jd_FontGetLineHeightForCodepoint(b->font_id, 41)};
-                jd_DrawRectWithZ(cur_pos, cur_size, (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0.0, 0.0, 0.0);
+            if (b->flags & jd_UIBoxFlags_ScrollX) {
+                string_pos.x -= b->scroll.x;
+                b->scroll_max.x = string_size.x - rect_size.x;
             }
             
+            if (b->flags & jd_UIBoxFlags_ScrollY) {
+                string_pos.y -= b->scroll.y;
+                b->scroll_max.y = string_size.y - rect_size.y;
+            }
+            
+            jd_V3F final_pos = {string_pos.x, string_pos.y, z};
+            jd_DrawStringWithZ(b->font_id, *b->text_box.string, final_pos, jd_TextOrigin_TopLeft, style->label_color, rect_size.x, clipping_rectangle_self);
+            if (b == vp->last_active) {
+                jd_V2F cur_pos_v2 = jd_CalcCursorPosUTF8(b->font_id, *b->text_box.string, b->rect.max.x, b->text_box.cursor);
+                
+                if (b->flags & jd_UIBoxFlags_ScrollX) cur_pos_v2.x -= b->scroll.x;
+                if (b->flags & jd_UIBoxFlags_ScrollY) cur_pos_v2.y -= b->scroll.y;
+                
+                jd_V3F cur_pos = {rect_pos.x + cur_pos_v2.x, rect_pos.y + cur_pos_v2.y, z};
+                b->text_box.last_cursor_pos = (jd_V2F){cur_pos_v2.x, cur_pos_v2.y};
+                jd_V2F cur_size = {2.0f, jd_FontGetLineHeightForCodepoint(b->font_id, 41)};
+                jd_DrawRectWithZ(cur_pos, cur_size, (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0.0, 0.0, 0.0, clipping_rectangle_self);
+            }
         }
         else if (b->label.count > 0) {
             jd_V2F string_pos = {rect_pos.x, rect_pos.y};
@@ -647,8 +684,10 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root) {
             string_pos.y += ((rect_size.y - string_size.y) * b->label_alignment.y);
             
             jd_V3F final_pos = {string_pos.x, string_pos.y, z};
-            jd_DrawStringWithZ(b->font_id, b->label, final_pos, jd_TextOrigin_TopLeft, style->label_color, 0.0f);
+            jd_DrawStringWithZ(b->font_id, b->label, final_pos, jd_TextOrigin_TopLeft, style->label_color, 0.0f, clipping_rectangle_parent);
         }
+        
+        b->rect = jd_RectClip(b->rect, clipping_rectangle_parent);
         
         jd_TreeTraversePreorder(b);
     }
@@ -665,15 +704,39 @@ void jd_UIEnd() {
     
     jd_UIViewport* vp = jd_UIViewportGetCurrent();
     
+    f32 scroll_step = 30.0f * jd_WindowGetDPIScale(vp->window);
+    
     jd_InputSliceForEach(i, vp->old_inputs) {
         jd_InputEvent* e = jd_DArrayGetIndex(vp->old_inputs.array, i);
         if (!e) { // Sanity Check
             jd_LogError("Incorrect input slice range!", jd_Error_APIMisuse, jd_Error_Fatal);
         }
         
-        b8 text_edit_active = (vp->last_active && vp->last_active->text_edit);
+        b8 text_edit_active = (vp->last_active && (vp->last_active->flags & jd_UIBoxFlags_TextEdit));
         
         i64 delta = 0;
+        
+        if (vp->hot && !(e->scroll_delta.x == 0 && e->scroll_delta.y == 0)) {
+            jd_UIBoxRec* sb = vp->hot;
+            while (sb && !(sb->flags & jd_UIBoxFlags_ScrollY) && !(sb->flags & jd_UIBoxFlags_ScrollX)) {
+                sb = sb->parent;
+            }
+            
+            if (sb) {
+                if (sb->flags & jd_UIBoxFlags_ScrollY) {
+                    sb->scroll.y += (e->scroll_delta.y * scroll_step);
+                    if (sb->scroll.y < 0.0f) sb->scroll.y = 0;
+                    if (sb->scroll.y > sb->scroll_max.y) sb->scroll.y = sb->scroll_max.y;
+                }
+                
+                if (sb->flags & jd_UIBoxFlags_ScrollX) {
+                    sb->scroll.x += e->scroll_delta.x * scroll_step;
+                    if (sb->scroll.x < 0.0f) sb->scroll.x = 0;
+                    if (sb->scroll.x > sb->scroll_max.x) sb->scroll.x = sb->scroll_max.x;
+                }
+            }
+            
+        }
         
         if (text_edit_active) {
             jd_UIBoxRec* b = vp->last_active;
@@ -707,7 +770,7 @@ void jd_UIEnd() {
                         line_adv = -line_adv;
                     
                     jd_V2F current_pos = b->text_box.last_cursor_pos;
-                    jd_V2F new_pos = {current_pos.x, current_pos.y + line_adv};
+                    jd_V2F new_pos = {current_pos.x + b->scroll.x, current_pos.y + b->scroll.y + line_adv};
                     u64 cursor = b->text_box.cursor;
                     u64 new_cursor = jd_CalcCursorIndexUTF8(b->font_id, *b->text_box.string, b->rect.max.x, new_pos);
                     i64 delta = new_cursor - cursor;
@@ -722,6 +785,13 @@ void jd_UIEnd() {
                 
                 case jd_Key_Tab: {
                     //jd_UI_Internal_InsertCodepoint(&b->text_box, 0x09);
+                    if (!(b->flags & jd_UIBoxFlags_ScrollY))
+                        break;
+                    if (jd_InputHasMod(e, jd_KeyMod_Shift)) {
+                        b->scroll.y -= 25.0f;
+                    } else {
+                        b->scroll.y += 25.0f;
+                    }
                 } break;
                 
                 default: {
@@ -816,13 +886,12 @@ jd_UIViewport* jd_UIInitForWindow(jd_Window* window) {
 
 jd_UIResult jd_UILabel(jd_String label) {
     jd_UIBoxConfig config = {0};
-    config.clickable = false;
+    config.flags = jd_UIBoxFlags_StaticColor;
     config.string_id = _jd_UIStringGetHashPart(label);
     config.label = _jd_UIStringGetDisplayPart(label);
     config.size.rule[jd_UIAxis_X] = jd_UISizeRule_FitText;
     config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_FitText;
     config.cursor = jd_Cursor_Default;
-    config.static_color = true;
     
     jd_UIResult result = jd_UIBoxBegin(&config);
     jd_UIBoxEnd();
@@ -832,13 +901,27 @@ jd_UIResult jd_UILabel(jd_String label) {
 
 jd_UIResult jd_UILabelButton(jd_String label) {
     jd_UIBoxConfig config = {0};
-    config.clickable = true;
+    config.flags = jd_UIBoxFlags_Clickable;
     config.string_id = _jd_UIStringGetHashPart(label);
     config.label = _jd_UIStringGetDisplayPart(label);
     config.size.rule[jd_UIAxis_X] = jd_UISizeRule_FitText;
     config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_FitText;
     config.cursor = jd_Cursor_Hand;
-    config.match_siblings_offaxis = true;
+    
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    
+    return result;
+}
+
+jd_UIResult jd_UIListButton(jd_String label) {
+    jd_UIBoxConfig config = {0};
+    config.flags = jd_UIBoxFlags_Clickable|jd_UIBoxFlags_MatchSiblingsOffAxis;
+    config.string_id = _jd_UIStringGetHashPart(label);
+    config.label = _jd_UIStringGetDisplayPart(label);
+    config.size.rule[jd_UIAxis_X] = jd_UISizeRule_FitText;
+    config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_FitText;
+    config.cursor = jd_Cursor_Hand;
     
     jd_UIResult result = jd_UIBoxBegin(&config);
     jd_UIBoxEnd();
@@ -848,7 +931,7 @@ jd_UIResult jd_UILabelButton(jd_String label) {
 
 jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment) {
     jd_UIBoxConfig config = {0};
-    config.clickable = true;
+    config.flags = jd_UIBoxFlags_Clickable;
     config.string_id =  _jd_UIStringGetHashPart(label);
     config.label = _jd_UIStringGetDisplayPart(label);
     config.size.rule[jd_UIAxis_X] = jd_UISizeRule_Fixed;
@@ -863,32 +946,29 @@ jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alig
     return result;
 }
 
-jd_UIResult jd_UIButton(jd_String label, jd_UISize size, b8 act_on_click, b8 static_color) {
+jd_UIResult jd_UIButton(jd_String label, jd_UISize size, jd_UIBoxFlags flags) {
     jd_UIBoxConfig config = {0};
-    config.clickable = true;
+    config.flags = flags;
+    config.flags |= jd_UIBoxFlags_Clickable;
     config.string_id =  _jd_UIStringGetHashPart(label);
     config.label = _jd_UIStringGetDisplayPart(label);
     config.size = size;
     config.cursor = jd_Cursor_Hand;
     config.label_alignment = (jd_V2F){0.5f, 0.5f};
-    config.act_on_click = act_on_click;
-    config.static_color = static_color;
     jd_UIResult result = jd_UIBoxBegin(&config);
     jd_UIBoxEnd();
     
     return result;
 }
 
-jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable) {
+jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, jd_UIBoxFlags flags) {
     jd_UIBoxConfig config = {0};
-    config.clickable = clickable;
-    if (config.clickable)
-        config.act_on_click = true;
+    config.flags = flags;
+    config.flags |= jd_UIBoxFlags_StaticColor;
     config.string_id  = string_id;
     config.layout.dir = dir;
     config.layout.gap = gap;
     config.size = size;
-    config.static_color = true;
     config.cursor = jd_Cursor_Default;
     config.style = style;
     
@@ -897,11 +977,10 @@ jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize s
     return result;
 }
 
-jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable) {
+jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, jd_UIBoxFlags flags) {
     jd_UIBoxConfig config = {0};
-    config.clickable = clickable;
-    if (config.clickable)
-        config.act_on_click = true;
+    config.flags = flags;
+    config.flags |= jd_UIBoxFlags_StaticColor;
     config.string_id  = string_id;
     config.layout.dir = dir;
     config.anchor_box = anchor_box;
@@ -909,7 +988,6 @@ jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_
     config.reference_point = anchor_from;
     config.layout.gap = gap;
     config.size = size;
-    config.static_color = true;
     config.cursor = jd_Cursor_Default;
     config.style = style;
     
@@ -920,13 +998,11 @@ jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_
 
 jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size) {
     jd_UIBoxConfig config = {0};
-    config.clickable = true;
+    config.flags = jd_UIBoxFlags_Clickable|jd_UIBoxFlags_TextEdit|jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_ScrollY;
     config.string_id  = string_id;
     config.size = size;
-    config.static_color = true;
     config.cursor = jd_Cursor_Default;
     config.style = style;
-    config.text_edit = true;
     config.text_box = (jd_UITextBox){ .string = string, .max = max_string_size };
     
     jd_UIResult result = jd_UIBoxBegin(&config);

@@ -100,6 +100,11 @@ typedef struct jd_V4F {
 #define jd_V4FAddRGB(a, b) {a.x + b.x, a.y + b.y, a.w + b.w, a.h}
 #define jd_V4FSubRGB(a, b) {a.x - b.x, a.y - b.y, a.w - b.w, a.h}
 
+typedef struct jd_U32Range {
+    u32 min;
+    u32 max;
+} jd_U32Range;
+
 typedef struct jd_V2U64 {
     u64 x;
     u64 y;
@@ -159,8 +164,14 @@ typedef struct jd_RectF32 {
 } jd_RectF32;
 
 typedef struct jd_u128 {
-    u64 lo;
-    u64 hi;
+    union {
+        struct {
+            u64 lo;
+            u64 hi;
+        };
+        
+        u64 val[2];
+    };
 } jd_u128;
 
 #define jd_u128_EQ(a, b) (a.lo == b.lo && a.hi == b.hi)

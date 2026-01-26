@@ -68,6 +68,19 @@ typedef struct jd_UITextBox {
     u64 max;
 } jd_UITextBox;
 
+typedef enum jd_UIBoxFlags {
+    jd_UIBoxFlags_None                 = 0,
+    jd_UIBoxFlags_Clickable            = 1 << 0,
+    jd_UIBoxFlags_ActOnClick           = 1 << 1,
+    jd_UIBoxFlags_MatchSiblingsOffAxis = 1 << 2,
+    jd_UIBoxFlags_StaticColor          = 1 << 3,
+    jd_UIBoxFlags_Disabled             = 1 << 4,
+    jd_UIBoxFlags_SelectableLabel      = 1 << 5,
+    jd_UIBoxFlags_TextEdit             = 1 << 6,
+    jd_UIBoxFlags_ScrollX              = 1 << 7,
+    jd_UIBoxFlags_ScrollY              = 1 << 8
+} jd_UIBoxFlags;
+
 typedef struct jd_UIBoxRec {
     jd_UITag   tag;
     jd_String  string_id;
@@ -78,10 +91,13 @@ typedef struct jd_UIBoxRec {
     jd_String  font_id;
     jd_V4F     color;
     jd_Cursor  cursor;
+    jd_V2F     scroll;
+    jd_V2F     scroll_max;
+    
+    jd_UIBoxFlags flags;
     
     u32 draw_index;
     
-    b8           text_edit;
     jd_UITextBox text_box;
     
     jd_UISize size;
@@ -89,17 +105,12 @@ typedef struct jd_UIBoxRec {
     jd_V2F    fixed_position;
     jd_V2F    reference_point;
     
-    b8 match_siblings_offaxis;
-    
     struct jd_UIBoxRec* anchor_box;
-    
     jd_V2F anchor_reference_point;
     
     struct jd_UIStyle* style;
     struct jd_UILayout* layout;
-    
     struct jd_UIViewport* vp;
-    
     struct jd_UIBoxRec* next_with_same_hash;
     
     u64 frame_last_touched;
@@ -165,7 +176,7 @@ typedef struct jd_UIBoxConfig {
     jd_UILayout   layout;
     jd_V2F        fixed_position;
     jd_V2F        reference_point; // 0, 0 = Top Left TODO: Rethink the names of (probably) most things in this struct, especially this.
-    b8            match_siblings_offaxis; // Useful hack for menu buttons that should be as long as their longest sibling
+    
     
     jd_UIBoxRec*  anchor_box;
     jd_V2F        anchor_reference_point;
@@ -177,13 +188,16 @@ typedef struct jd_UIBoxConfig {
     jd_RectF32    rect;
     jd_V4F        color;
     
-    b8            clickable;
-    b8            act_on_click;
-    b8            static_color;
-    b8            disabled;
-    b8            label_selectable;
+    jd_UIBoxFlags flags;
+    
+    //b8            match_siblings_offaxis; // Useful hack for menu buttons that should be as long as their longest sibling
+    //b8            clickable;
+    //b8            act_on_click;
+    //b8            static_color;
+    //b8            disabled;
+    //b8            label_selectable;
     jd_Cursor     cursor;
-    b8            text_edit;
+    //b8            text_edit;
     jd_UITextBox  text_box;
     
     // TODO: Texture information? I feel like there's no reason to not have it this low level with this design,
@@ -199,7 +213,7 @@ jd_ExportFn void           jd_UIBoxEnd();
 jd_ExportFn jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport);
 jd_ExportFn void           jd_UIEnd();
 jd_ExportFn jd_UIViewport* jd_UIInitForWindow(jd_Window* window);
-jd_ExportFn jd_ForceInline void jd_UISeedPushPtr(void* ptr);
+jd_ExportFn jd_ForceInline void jd_UISeedPushU32(u32 v);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
 jd_ExportFn jd_ForceInline void jd_UIStylePush(jd_UIStyle* style);
 jd_ExportFn jd_ForceInline void jd_UIStylePop();
@@ -208,11 +222,12 @@ jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_String font_id);
 jd_ExportFn jd_ForceInline void jd_UIFontPop();
 jd_ExportFn jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent();
 jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box);
-jd_ExportFn jd_UIResult jd_UIButton(jd_String label, jd_UISize size, b8 act_on_click, b8 static_color);
+jd_ExportFn jd_UIResult jd_UIButton(jd_String label, jd_UISize size, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UILabel(jd_String label);
 jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label);
+jd_ExportFn jd_UIResult jd_UIListButton(jd_String label);
 jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
-jd_ExportFn jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
+jd_ExportFn jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
 jd_ExportFn jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size);
 jd_ExportFn jd_UIBoxRec* jd_UIGetLastBox();
@@ -230,8 +245,6 @@ static jd_UIStyle jd_default_style_dark = {
 };
 
 #ifdef JD_IMPLEMENTATION
-
-
 
 #include "jd_ui.c"
 #endif

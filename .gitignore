@@ -36,3 +36,4 @@
 *.obj
 *.ttf
 *.lib
+include/jd_xml.h

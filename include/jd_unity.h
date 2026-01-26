@@ -66,6 +66,7 @@
 #include "jd_ui.c"
 #include "jd_hash.c"
 #include "jd_databank.c"
+#include "jd_xml.c"
 
 #endif
 

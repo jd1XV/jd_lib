@@ -115,7 +115,7 @@ typedef struct jd_DataFilter {
 
 jd_ExportFn jd_DataFilter* jd_DataFilterCreate(jd_Arena* arena, jd_String key);
 jd_ExportFn jd_DataFilter* jd_DataFilterPush(jd_Arena* arena, jd_DataFilter* parent, jd_String key, jd_Value value, jd_DataFilterRule rule);
-jd_ExportFn b32                 jd_DataFilterEvaluate(jd_DataFilter* filter, jd_DataNode* n, b32 case_sensitive);
+jd_ExportFn b32            jd_DataFilterEvaluate(jd_DataFilter* filter, jd_DataNode* n, b32 case_sensitive);
 
 jd_ExportFn jd_DataBank*  jd_DataBankCreate(jd_DataBankConfig* config);
 jd_ExportFn jd_DFile*     jd_DataBankSerialize(jd_DataBank* bank);

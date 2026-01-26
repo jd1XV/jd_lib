@@ -89,6 +89,18 @@ b32 jd_StringContainsSubstring(jd_String string, jd_String substring) {
     return false;
 }
 
+b32 jd_StringBeginsWith(jd_String string, jd_String substring) {
+    if (substring.count > string.count) return false;
+    
+    for (u32 i = 0; i < substring.count; i++) {
+        if (string.mem[i] != substring.mem[i]) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
 jd_ForceInline jd_DString* jd_DStringCreate(u64 capacity) {
     jd_Arena* arena = jd_ArenaCreate(capacity, 0);
     jd_DString* d_string = jd_ArenaAlloc(arena, sizeof(*d_string));

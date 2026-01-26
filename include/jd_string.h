@@ -27,6 +27,7 @@ jd_ExportFn jd_String jd_StringPostfix(jd_String str, jd_String pattern);
 
 jd_ExportFn b32 jd_StringMatch(jd_String a, jd_String b);
 jd_ExportFn b32 jd_StringContainsSubstring(jd_String string, jd_String substring);
+jd_ExportFn b32 jd_StringBeginsWith(jd_String string, jd_String substring);
 
 #define jd_DStringGet(x) (jd_String){x->mem, x->count}
 

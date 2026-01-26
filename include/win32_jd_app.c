@@ -222,20 +222,6 @@ void jd_AppUpdatePlatformWindow(jd_Window* window) {
     SwapBuffers(window->device_context);
 }
 
-void jd_WindowDrawFPS(jd_Window* window, jd_TextOrigin origin, jd_V2F pos) {
-    if (!window->fps_counter_string) {
-        window->fps_counter_string = jd_DStringCreate(256);
-    }
-    
-    jd_DStringClear(window->fps_counter_string);
-    
-    f64 fps_f = 1000.0f / window->frame_time;
-    u32 fps_i = (u32)fps_f;
-    
-    jd_DStringAppendU32(window->fps_counter_string, fps_i, 10);
-    jd_DrawStringWithBG(jd_StrLit("OS_BaseFontWindows"), jd_DStringGet(window->fps_counter_string), pos, origin, (jd_V4F){1.0, 1.0, 1.0, 1.0}, (jd_V4F){.2, 0.2, 0.2, 0.65}, 1280.0f, 0.0f, 0.0f, 0.0f);
-}
-
 void jd_AppUpdatePlatformWindows(jd_App* app) {
     jd_UserLockGet(app->lock);
     static u64 reload_delay = 0;
@@ -353,7 +339,7 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
         .fixed_size = {0.0f, titlebar_height}
     };
     
-    if (jd_UIButton(window->title, label_size, true, true).l_clicked) {
+    if (jd_UIButton(window->title, label_size, jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_ActOnClick).l_clicked) {
         SendMessage(window->handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(jd_AppGetMousePos(window).x, jd_AppGetMousePos(window).y));
     }
     
@@ -997,7 +983,15 @@ LRESULT CALLBACK jd_WindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPA
         }
         
         case WM_MOUSEWHEEL: {
-            
+            e.scroll_delta.y -= (f32)((f32)GET_WHEEL_DELTA_WPARAM(w_param) / WHEEL_DELTA);
+            jd_DArrayPushBack(window->input_events, &e);
+            break;
+        }
+        
+        
+        case WM_MOUSEHWHEEL: {
+            e.scroll_delta.x -= (f32)((f32)GET_WHEEL_DELTA_WPARAM(w_param) / WHEEL_DELTA);
+            jd_DArrayPushBack(window->input_events, &e);
             break;
         }
         

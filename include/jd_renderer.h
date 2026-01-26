@@ -136,6 +136,13 @@ typedef struct jd_TexturePool {
     u64 texture_count;
 } jd_TexturePool;
 
+typedef struct jd_DrawGroup {
+    u64 index;
+    jd_2DTexture* tex;
+    
+    jd_Node(jd_DrawGroup);
+} jd_DrawGroup;
+
 typedef struct jd_Renderer {
     jd_Arena* arena;
     jd_Arena* frame_arena;
@@ -144,6 +151,10 @@ typedef struct jd_Renderer {
     
     f32 dpi_scaling;
     jd_V2F render_size;
+    
+    jd_DrawGroup* draw_group_chain_head;
+    jd_DrawGroup* draw_group_chain_tail;
+    jd_DArray* vertices;
     
     jd_2DTexture* render_chain;
     
@@ -156,14 +167,14 @@ typedef struct jd_Renderer {
 jd_ExportFn jd_Renderer* jd_RendererGet();
 void jd_RendererInit();
 jd_ExportFn void jd_RendererBegin(jd_V2F render_size);
-jd_ExportFn void jd_DrawString(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width);
-jd_ExportFn void jd_DrawStringWithZ(jd_String font_id, jd_String str, jd_V3F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width);
+jd_ExportFn void jd_DrawString(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width, jd_RectF32 clip_rect);
+jd_ExportFn void jd_DrawStringWithZ(jd_String font_id, jd_String str, jd_V3F window_pos, jd_TextOrigin baseline, jd_V4F color, f32 wrap_width, jd_RectF32 clip_rect);
 jd_ExportFn jd_V2F jd_CalcStringSizeUTF8(jd_String font_id, jd_String str, f32 wrap_width);
 jd_ExportFn u64 jd_CalcCursorIndex(jd_String font_id, jd_UTFDecodedString utf32_string, f32 wrap_width, jd_V2F desired_pos);
 jd_ExportFn jd_V2F jd_CalcCursorPos(jd_String font_id, jd_UTFDecodedString utf32_string, f32 wrap_width, u64 cursor_index);
 jd_ExportFn void jd_DrawStringWithBG(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F text_color, jd_V4F bg_color, f32 wrap_width, f32 box_rounding, f32 box_softness, f32 box_thickness);
 jd_ExportFn void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness);
-jd_ExportFn void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness);
+jd_ExportFn void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 softness, f32 thickness, jd_RectF32 clip_rectangle);
 jd_ExportFn void jd_RendererSetDPIScale(jd_Renderer* renderer, f32 scale);
 jd_ExportFn void jd_RendererBegin(jd_V2F render_size);
 jd_ExportFn void jd_RefreshFonts();

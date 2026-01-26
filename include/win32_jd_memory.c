@@ -86,7 +86,8 @@ jd_View jd_ArenaAllocView(jd_Arena* arena, u64 size) {
 void jd_ArenaPopTo(jd_Arena* arena, u64 pos) {
     arena->pos = sizeof(jd_Arena) + pos;
     u64 pos_aligned = jd_AlignUpPow2(arena->pos, arena->_commit_page_size);
-    if (pos_aligned - arena->pos > 0)
+    i64 diff = pos_aligned - arena->pos;
+    if (diff > 0)
         jd_ZeroMemory(arena->mem + arena->pos, pos_aligned - arena->pos);
     if (arena->commit_pos > pos_aligned && arena->commit_pos > arena->_commit_page_size) {
         u64 diff = arena->commit_pos - pos_aligned;
@@ -101,12 +102,12 @@ void jd_ArenaRelease(jd_Arena* arena) {
 
 jd_ScratchArena jd_ScratchArenaCreate(jd_Arena* arena) {
     if (!arena) {
-        jd_LogError("Cannot create sratch arena on null arena.", jd_Error_APIMisuse, jd_Error_Fatal);
+        jd_LogError("Cannot create scratch arena on null arena.", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     
     jd_ScratchArena scratch = {
         .arena = arena,
-        .pos = arena->pos
+        .pos = arena->pos - sizeof(jd_Arena)
     };
     
     return scratch;

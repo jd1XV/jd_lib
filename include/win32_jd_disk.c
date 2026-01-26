@@ -26,6 +26,9 @@ u64 jd_DiskGetFileLastMod(jd_String path) {
     u.LowPart = data.ftLastWriteTime.dwLowDateTime;
     u.HighPart = data.ftLastWriteTime.dwHighDateTime;
     
+    u.QuadPart -= 116444736000000000LL;
+    u.QuadPart /= 10000000LL;
+    
     return u.QuadPart;
 }
 
