@@ -14,6 +14,10 @@ jd_String jd_StrLit(c8* c_str) {
 }
 
 jd_String jd_StringPush(jd_Arena* arena, jd_String str) {
+    if (str.count == 0) {
+        jd_LogError("String is empty!", jd_Error_BadInput, jd_Error_Warning);
+        return str;
+    }
     jd_String string = {
         .mem = jd_ArenaAlloc(arena, str.count + 1), // + 1 so our strings will be null-terminated by default
         .count = str.count
@@ -69,6 +73,18 @@ jd_String jd_StringGetPostfix(jd_String str, jd_String pattern) {
     return s;
 }
 
+jd_String jd_StringGetPostfixLast(jd_String str, jd_String pattern) {
+    jd_String s = str;
+    for (u64 i = 0; i + pattern.count < str.count; i++) {
+        if (jd_MemCmp(&str.mem[i], pattern.mem, pattern.count)) {
+            s.mem = &str.mem[i];
+            s.count = str.count - i;
+            return s;
+        }
+    }
+    
+    return s;
+}
 b32 jd_StringMatch(jd_String a, jd_String b) {
     if (a.count != b.count) return false;
     return jd_MemCmp(a.mem, b.mem, a.count);

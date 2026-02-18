@@ -19,6 +19,8 @@ typedef struct jd_UIStyle {
     jd_V4F label_color;
     jd_V2F label_padding;
     
+    jd_V2F padding;
+    
     f32    softness;
     f32    rounding;
     f32    thickness;
@@ -37,11 +39,6 @@ typedef enum jd_UIAxis {
     jd_UIAxis_Y,
     jd_UIAxis_Count
 } jd_UIAxis;
-
-typedef struct jd_UILayout {
-    jd_UILayoutDir dir;
-    f32            gap;
-} jd_UILayout;
 
 typedef enum jd_UISizeRule {
     jd_UISizeRule_Grow,
@@ -78,8 +75,10 @@ typedef enum jd_UIBoxFlags {
     jd_UIBoxFlags_SelectableLabel      = 1 << 5,
     jd_UIBoxFlags_TextEdit             = 1 << 6,
     jd_UIBoxFlags_ScrollX              = 1 << 7,
-    jd_UIBoxFlags_ScrollY              = 1 << 8
+    jd_UIBoxFlags_ScrollY              = 1 << 8,
+    jd_UIBoxFlags_DragandDrop          = 1 << 9
 } jd_UIBoxFlags;
+
 
 typedef struct jd_UIBoxRec {
     jd_UITag   tag;
@@ -94,6 +93,11 @@ typedef struct jd_UIBoxRec {
     jd_V2F     scroll;
     jd_V2F     scroll_max;
     
+    jd_UIStyle style;
+    
+    u64 last_touched;
+    b8  being_dragged;
+    
     jd_UIBoxFlags flags;
     
     u32 draw_index;
@@ -102,14 +106,13 @@ typedef struct jd_UIBoxRec {
     
     jd_UISize size;
     jd_UIAxis layout_axis;
+    f32       layout_gap;
     jd_V2F    fixed_position;
     jd_V2F    reference_point;
     
     struct jd_UIBoxRec* anchor_box;
     jd_V2F anchor_reference_point;
     
-    struct jd_UIStyle* style;
-    struct jd_UILayout* layout;
     struct jd_UIViewport* vp;
     struct jd_UIBoxRec* next_with_same_hash;
     
@@ -120,7 +123,7 @@ typedef struct jd_UIBoxRec {
 
 typedef struct jd_UIViewport {
     jd_V2F size;
-    jd_V2F position_offset;
+    jd_V2F minimum_size;
     
     jd_UIBoxRec* root;
     jd_UIBoxRec* popup_root;
@@ -133,9 +136,9 @@ typedef struct jd_UIViewport {
     jd_UIBoxRec* hot;
     jd_UIBoxRec* active;
     jd_UIBoxRec* last_active;
+    jd_UIBoxRec* drag_box;
     
     jd_UIBoxRec* builder_parent;
-    
     jd_UIBoxRec* builder_last_box;
     
     jd_Window* window;
@@ -143,6 +146,8 @@ typedef struct jd_UIViewport {
     b32 roots_init;
     
     u32 box_count;
+    
+    u64 frame_counter;
     
     jd_InputEventSlice new_inputs;
     jd_InputEventSlice old_inputs;
@@ -173,10 +178,10 @@ typedef struct jd_UIBoxConfig {
     jd_UIBoxRec*  parent;
     jd_UIStyle*   style;
     jd_UISize     size;
-    jd_UILayout   layout;
     jd_V2F        fixed_position;
     jd_V2F        reference_point; // 0, 0 = Top Left TODO: Rethink the names of (probably) most things in this struct, especially this.
-    
+    f32           layout_gap;
+    f32           layout_dir;
     
     jd_UIBoxRec*  anchor_box;
     jd_V2F        anchor_reference_point;
@@ -190,14 +195,7 @@ typedef struct jd_UIBoxConfig {
     
     jd_UIBoxFlags flags;
     
-    //b8            match_siblings_offaxis; // Useful hack for menu buttons that should be as long as their longest sibling
-    //b8            clickable;
-    //b8            act_on_click;
-    //b8            static_color;
-    //b8            disabled;
-    //b8            label_selectable;
     jd_Cursor     cursor;
-    //b8            text_edit;
     jd_UITextBox  text_box;
     
     // TODO: Texture information? I feel like there's no reason to not have it this low level with this design,
@@ -214,6 +212,8 @@ jd_ExportFn jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport);
 jd_ExportFn void           jd_UIEnd();
 jd_ExportFn jd_UIViewport* jd_UIInitForWindow(jd_Window* window);
 jd_ExportFn jd_ForceInline void jd_UISeedPushU32(u32 v);
+jd_ExportFn jd_ForceInline void jd_UISeedPushString(jd_String string);
+jd_ExportFn jd_ForceInline void jd_UISeedPushStringF(jd_String fmt, ...);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
 jd_ExportFn jd_ForceInline void jd_UIStylePush(jd_UIStyle* style);
 jd_ExportFn jd_ForceInline void jd_UIStylePop();
@@ -229,7 +229,11 @@ jd_ExportFn jd_UIResult jd_UIListButton(jd_String label);
 jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
 jd_ExportFn jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
+jd_ExportFn jd_UIResult jd_UIRowGrowBegin(jd_String string_id, jd_UIStyle* style, f32 gap, jd_UIBoxFlags flags);
+jd_ExportFn jd_UIResult jd_UIColGrowBegin(jd_String string_id, jd_UIStyle* style, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size);
+jd_ExportFn jd_UIResult jd_UIWindowRegionBegin(jd_V2F min_size, jd_UIStyle* style, jd_UILayoutDir dir, f32 gap);
+jd_ExportFn jd_UIResult jd_UIGrowPadding(jd_String string_id);
 jd_ExportFn jd_UIBoxRec* jd_UIGetLastBox();
 jd_ExportFn void        jd_UIRegionEnd();
 
@@ -242,6 +246,10 @@ static jd_UIStyle jd_default_style_dark = {
     .softness = 0.0f,
     .rounding = 0.0f,
     .thickness = 0.0f
+};
+
+static jd_UIStyle jd_invisible_style = {
+    0
 };
 
 #ifdef JD_IMPLEMENTATION

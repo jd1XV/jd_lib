@@ -13,6 +13,7 @@ jd_ExportFn u64    jd_I64Abs(i64 x);
 jd_ExportFn f32    jd_F32Abs(f32 x);
 jd_ExportFn jd_V4F jd_V4FMul4(jd_V4F a, jd_V4F b);
 jd_ExportFn jd_V4F jd_V4FMulS(jd_V4F a, f32 b);
+jd_ExportFn jd_V4F jd_V4FMul3S(jd_V4F a, f32 b);
 jd_ExportFn jd_V4F jd_V4FColorLerp(jd_V4F a, jd_V4F b, f32 frac);
 
 #ifdef JD_IMPLEMENTATION

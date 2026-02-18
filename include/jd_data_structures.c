@@ -14,6 +14,7 @@ jd_DArray* jd_DArrayCreate(u64 max, u64 stride) {
 }
 
 jd_ForceInline void* jd_DArrayGetIndex(jd_DArray* d_array, u64 index) {
+    if (index >= d_array->count) return 0;
     return (void*)((u8*)(d_array->view.mem + (d_array->stride * index)));
 }
 

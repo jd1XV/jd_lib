@@ -8,7 +8,7 @@
 static jd_Renderer* jd_global_renderer = 0;
 
 
-jd_String vs_string = jd_StrConst("#version 430\n"
+jd_String vs_string = jd_StrConst("#version 460\n"
                                   "layout (location = 0) in vec3 vert_xyz;\n"
                                   "layout (location = 1) in vec3 vert_uvw;\n"
                                   "layout (location = 2) in vec4 vert_col;\n"
@@ -42,7 +42,7 @@ jd_String vs_string = jd_StrConst("#version 430\n"
                                   "}"
                                   );
 
-jd_String fs_string = jd_StrConst("#version 430\n"
+jd_String fs_string = jd_StrConst("#version 460\n"
                                   "in vec3 fs_xyz;\n"
                                   "in vec3 fs_uvw;\n"
                                   "in vec4 fs_col;\n"
@@ -250,8 +250,6 @@ jd_ForceInline jd_2DTexture* jd_TextureInsert(u32 gl_index) {
             tex = tex->next;
         }
     }
-    
-    tex->vertices = jd_DArrayCreate(MEGABYTES(1), sizeof(jd_GLVertex));
     
     return tex;
 }
@@ -734,12 +732,12 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
     if (!wrap) {
         for (u64 i = 0; i < utf32_string.count; i++) {
             if (utf32_string.utf32[i] == 0x0a) {
+                size.y += font->faces[0].line_adv * dpi_scaling;
+                pos.x = 0.0f;
                 continue;
             }
             
             if (utf32_string.utf32[i] == 0x0d) {
-                size.y += font->faces[0].line_adv * dpi_scaling;
-                pos.x = 0.0f;
                 continue;
             }
             
@@ -764,7 +762,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
             }
             
             if (utf32_string.utf32[i] == 0x0d) {
-                
+                continue;
             }
             
             if (utf32_string.utf32[i] == 0) {
@@ -1131,7 +1129,7 @@ void jd_DrawStringWithBG(jd_String font_id, jd_String str, jd_V2F window_pos, jd
     jd_DrawRect(box_pos, max, bg_color, box_rounding, box_softness, thickness);
     jd_DrawStringUTF32(font_id, utf32_string, pos, baseline, text_color, wrap_width);
 }
-#endif
+#endif
 
 f32 jd_FontGetLineAdvForCodepoint(jd_String font_id, u32 codepoint) {
     jd_Renderer* renderer = jd_RendererGet();
@@ -1329,7 +1327,7 @@ void jd_RendererInit() {
     renderer->arena = arena;
     renderer->frame_arena = jd_ArenaCreate(0, 0);
     renderer->dpi_scaling = 1.0f;
-    renderer->vertices = jd_DArrayCreate(MEGABYTES(64) / sizeof(jd_GLVertex), sizeof(jd_GLVertex));
+    renderer->vertices = jd_DArrayCreate(MEGABYTES(32) / sizeof(jd_GLVertex), sizeof(jd_GLVertex));
     jd_RenderObjects* objects = &renderer->objects;
     jd_ShaderCreate(renderer);
     
@@ -1385,7 +1383,7 @@ void jd_RendererInit() {
     pos += sizeof(f32);
     
     //glBindBuffer(GL_ARRAY_BUFFER, objects->vbo);
-    glBufferData(GL_ARRAY_BUFFER, MEGABYTES(1) * sizeof(jd_GLVertex), NULL, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, KILOBYTES(512) * sizeof(jd_GLVertex), NULL, GL_DYNAMIC_DRAW);
     //glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     //glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 }

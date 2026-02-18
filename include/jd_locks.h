@@ -29,6 +29,12 @@ jd_ForceInline void       jd_RWLockGet(jd_RWLock* lock, jd_RWLockMode mode);
 jd_ForceInline b32        jd_RWLockTryGet(jd_RWLock* lock, jd_RWLockMode mode);
 jd_ForceInline void       jd_RWLockRelease(jd_RWLock* lock, jd_RWLockMode mode);
 
+typedef struct jd_CondVar jd_CondVar;
+
+jd_ForceInline jd_CondVar* jd_CondVarCreate(jd_Arena* arena);
+jd_ForceInline void jd_CondVarWait(jd_CondVar* cv, jd_UserLock* lock);
+jd_ForceInline void jd_CondVarWakeAll(jd_CondVar* cv);
+
 #ifdef JD_IMPLEMENTATION
 
 #ifdef JD_WINDOWS

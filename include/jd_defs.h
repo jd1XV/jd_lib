@@ -155,13 +155,29 @@ typedef struct jd_RectF32 {
         
         struct {
             f32 x0;
-            f32 x1;
             f32 y0;
+            f32 x1;
             f32 y1;
         };
     };
     
 } jd_RectF32;
+
+typedef struct jd_RectU32 {
+    union {
+        struct {
+            jd_V2U min;
+            jd_V2U max;
+        };
+        
+        struct {
+            u32 x0;
+            u32 y0;
+            u32 x1;
+            u32 y1;
+        };
+    };
+} jd_RectU32;
 
 typedef struct jd_u128 {
     union {
@@ -184,6 +200,8 @@ typedef struct jd_u128 {
 #define jd_ExportFn __declspec(dllexport)
 
 #define jd_ForceInline __forceinline
+
+#define jd_ThreadLocal _Thread_local
 
 #ifdef JD_DEBUG
 #include <assert.h>

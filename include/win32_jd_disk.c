@@ -95,5 +95,5 @@ b32 jd_DiskWriteFileToPath(jd_File file, jd_String path) {
     
     CloseHandle(fmo_handle);
     CloseHandle(handle);
-    return 0;
+    return true;
 }

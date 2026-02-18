@@ -38,10 +38,8 @@ jd_ReloadableFunction
 
 typedef struct jd_Window jd_Window;
 jd_ExportFn jd_V2F jd_WindowGetDrawSize(jd_Window* window);
-jd_ExportFn jd_V2F jd_WindowGetDrawOrigin(jd_Window* window);
 jd_ExportFn jd_V2F jd_WindowGetScaledSize(jd_Window* window);
 jd_ExportFn f64 jd_WindowGetDPIScale(jd_Window* window);
-
 jd_ExportFn f32 jd_WindowGetFrameTime(jd_Window* window);
 
 typedef struct jd_App jd_App;
@@ -113,7 +111,9 @@ b32        jd_AppWindowIsActive(jd_Window* window);
 void       jd_AppPlatformCloseWindow(jd_Window* window);
 b32        jd_AppPlatformUpdate(jd_App* app);
 void       jd_AppSetCursor(jd_Cursor cursor);
-jd_ExportFn void jd_WindowDrawFPS(jd_Window* window, jd_TextOrigin origin, jd_V2F pos);
+void       jd_WindowSetMinimumSize(jd_Window* window, jd_V2F size);
+
+jd_ExportFn u64  jd_AppCurrentFrame();
 jd_ExportFn void jd_AppDefaultTitlebar(jd_Window* window);
 
 #ifdef JD_WINDOWS

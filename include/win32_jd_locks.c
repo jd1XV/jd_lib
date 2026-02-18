@@ -2,6 +2,9 @@ typedef struct jd_UserLock {
     CRITICAL_SECTION lock;
 } jd_UserLock;
 
+typedef struct jd_CondVar {
+    CONDITION_VARIABLE cv;
+} jd_CondVar;
 
 jd_UserLock* jd_UserLockCreate(jd_Arena* arena, u64 spin_count) {
     jd_UserLock* lock = jd_ArenaAlloc(arena, sizeof(CRITICAL_SECTION));
@@ -21,7 +24,7 @@ void jd_UserLockRelease(jd_UserLock* lock) {
 }
 
 b32 jd_UserLockTryGet(jd_UserLock* lock) {
-    if (TryEnterCriticalSection(&lock->lock) == 0) return false;
+    if (!TryEnterCriticalSection(&lock->lock)) return false;
     else return true;
 }
 
@@ -93,3 +96,16 @@ jd_ForceInline void jd_RWLockRelease(jd_RWLock* lock, jd_RWLockMode mode) {
     }
 }
 
+jd_CondVar* jd_CondVarCreate(jd_Arena* arena) {
+    jd_CondVar* cv = jd_ArenaAlloc(arena, sizeof(*cv));
+    InitializeConditionVariable(&cv->cv);
+    return cv;
+}
+
+void jd_CondVarWait(jd_CondVar* cv, jd_UserLock* lock) {
+    SleepConditionVariableCS(&cv->cv, &lock->lock, INFINITE);
+}
+
+void jd_CondVarWakeAll(jd_CondVar* cv) {
+    WakeAllConditionVariable(&cv->cv);
+}

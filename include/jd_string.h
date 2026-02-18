@@ -22,8 +22,8 @@ jd_ExportFn jd_String jd_StringPush(jd_Arena* arena, jd_String str);
 jd_ExportFn jd_String jd_StringPushF(jd_Arena* arena, jd_String fmt_string, ...);
 jd_ExportFn jd_String jd_StringPushVAList(jd_Arena* arena, jd_String fmt_string, va_list list);
 
-jd_ExportFn jd_String jd_StringPrefix(jd_String str, jd_String pattern);
-jd_ExportFn jd_String jd_StringPostfix(jd_String str, jd_String pattern);
+jd_ExportFn jd_String jd_StringGetPrefix(jd_String str, jd_String pattern);
+jd_ExportFn jd_String jd_StringGetPostfix(jd_String str, jd_String pattern);
 
 jd_ExportFn b32 jd_StringMatch(jd_String a, jd_String b);
 jd_ExportFn b32 jd_StringContainsSubstring(jd_String string, jd_String substring);

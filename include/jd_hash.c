@@ -45,9 +45,7 @@ u32 jd_HashStrToU32(jd_String input_str, u32 seed) {
     u32 c1 = 0xcc9e2d51;
     u32 c2 = 0x1b873593;
     
-    u32 i = 0;
-    
-    for (i = 0; i < num_blocks; i++) {
+    for (u32 i = 0; i < num_blocks; i++) {
         u32 k1 = *(u32*)(input_str.mem + (i * 4));
         
         k1 *= c1;
@@ -61,10 +59,12 @@ u32 jd_HashStrToU32(jd_String input_str, u32 seed) {
     
     u32 k1 = 0;
     
-    switch (input_str.count & 3) {
-        case 3: k1 ^= input_str.mem[i + 2] << 16;
-        case 2: k1 ^= input_str.mem[1 + 1] << 8;
-        case 1: k1 ^= input_str.mem[i];
+    u32 remaining = input_str.count - (num_blocks * 4);
+    u64 remaining_idx = input_str.count - remaining;
+    switch ((remaining) & 3) {
+        case 3: k1 ^= input_str.mem[remaining_idx + 2] << 16;
+        case 2: k1 ^= input_str.mem[remaining_idx + 1] << 8;
+        case 1: k1 ^= input_str.mem[remaining_idx];
         k1 *= c1; 
         k1 = _jd_RotateLeft32(k1, 15); 
         k1 *= c2; 
