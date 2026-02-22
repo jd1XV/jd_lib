@@ -319,8 +319,6 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
         .label_color      = {1.0f, 1.0f, 1.0f, 1.0f}
     };
     
-    //TODO: Fix this, PushStyle doesn't work properly with local styles.
-    
     jd_UISize size = {
         .rule = {jd_UISizeRule_Grow, jd_UISizeRule_Fixed},
         .fixed_size = {0.0f, titlebar_height}
@@ -615,7 +613,7 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     }
     
     wglMakeCurrent(window->device_context, config->app->ogl_context);
-    wglSwapIntervalEXT(1);
+    wglSwapIntervalEXT(0);
     ShowWindow(window->handle, SW_SHOW);
     
     if (!config->app->renderer_initialized) {

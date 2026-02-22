@@ -280,7 +280,7 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     
     if (!style) {
         style = &jd_default_style_dark;
-        jd_LogError("No style specified! Using default style", jd_Error_APIMisuse, jd_Error_Warning);
+        //jd_LogError("No style specified! Using default style", jd_Error_APIMisuse, jd_Error_Warning);
     }
     
     b8 act_on_click = (config->flags & jd_UIBoxFlags_ActOnClick);
@@ -480,6 +480,8 @@ void jd_UI_Internal_SolveFixedSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             b->rect.max.val[axis] += b->style.label_padding.val[axis];
         }
         
+        b->requested_size.val[axis] = b->rect.max.val[axis];
+        
         jd_TreeTraversePreorder(b);
     }
 }
@@ -500,6 +502,7 @@ void jd_UI_Internal_SolveGrowSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             }
             
         }
+        b->requested_size.val[axis] = b->rect.max.val[axis];
         jd_TreeTraversePreorder(b);
     }
 }
@@ -522,6 +525,7 @@ void jd_UI_Internal_SolvePctParentSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             }
         }
         
+        b->requested_size.val[axis] = b->rect.max.val[axis];
         jd_TreeTraversePreorder(b);
     }
 }
@@ -543,16 +547,25 @@ void jd_UI_Internal_SolveFitChildrenSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             
             b->rect.max.val[axis] = size;
         }
+        
+        b->requested_size.val[axis] = b->rect.max.val[axis];
         jd_TreeTraversePostorder(b);
     }
 }
 
 void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
     jd_UIBoxRec* b = root;
+    
+    while (b) {
+        b->rect.max.val[axis] += (b->style.padding.val[axis] * 2);
+        jd_TreeTraversePreorder(b);
+    }
+    
+    b = root;
+    
     while (b) {
         f32 size = 0.0f;
-        f32 allowed_size = b->rect.max.val[axis];
-        b->rect.max.val[axis] += b->style.padding.val[axis] * 2;
+        f32 allowed_size = b->rect.max.val[axis] - (b->style.padding.val[axis] * 2);
         
         u32 child_count = 0;
         for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next, child_count++);
@@ -575,12 +588,12 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
                 f32 requested_size = 0.0f;
                 u32 grow_children = 0;
                 
-                for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
-                    if (!c->anchor_box) {
-                        requested_size += c->rect.max.val[axis];
+                for (jd_UIBoxRec* child = b->first_child; child != 0; child = child->next) {
+                    if (!child->anchor_box) {
+                        requested_size += child->rect.max.val[axis];
                     }
                     
-                    if (c->size.rule[axis] == jd_UISizeRule_Grow) {
+                    if (child->size.rule[axis] == jd_UISizeRule_Grow) {
                         grow_children++;
                     }
                 }
@@ -589,7 +602,7 @@ void jd_UI_Internal_SolveConflicts(jd_UIBoxRec* root, jd_UIAxis axis) {
                 if (over > 0 && !b->anchor_box) {
                     for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
                         if (c->size.rule[axis] == jd_UISizeRule_Grow) {
-                            c->rect.max.val[axis] -= (f32)(over / grow_children);
+                            c->rect.max.val[axis] -= (f32)(over / (f32)grow_children);
                             c->rect.max.val[axis] = jd_Max(c->rect.max.val[axis], 0);
                         }
                     }
@@ -664,6 +677,8 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
     jd_UIViewport* vp = b->vp;
     f64 dpi_sf = jd_WindowGetDPIScale(vp->window);
     
+    b8 debug = vp->debug_mode;
+    
     while (b) {
         jd_UIStyle style = b->style;
         
@@ -725,6 +740,7 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
                 jd_DrawRectWithZ(cur_pos, cur_size, (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0.0, 0.0, 0.0, clipping_rectangle_self);
             }
         }
+        
         else if (b->label.count > 0) {
             jd_V2F string_pos = {rect_pos.x, rect_pos.y};
             
@@ -742,6 +758,22 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         }
         
         b->rect = jd_RectClip(b->rect, clipping_rectangle_parent);
+        
+        if (debug && b->font_id.count > 0) {
+            jd_ScratchArena s = jd_ScratchArenaCreate(_jd_internal_ui_state.arena);
+            jd_String formatted_string = jd_StringPushF(s.arena, 
+                                                        jd_StrLit("RSize: X: %.2f Y: %.2f - FSize: X: %.2f Y: %.2f"),
+                                                        b->requested_size.x,
+                                                        b->requested_size.y,
+                                                        b->rect.x1,
+                                                        b->rect.y1);
+            
+            jd_DrawRectWithZ(rect_pos, rect_size, (jd_V4F){1.0f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f, 2.0f, clipping_rectangle_parent);
+            jd_DrawStringWithZ(b->font_id, formatted_string, rect_pos, jd_TextOrigin_TopLeft, style.label_color, 0.0f, clipping_rectangle_parent);
+            
+            jd_DebugPrint(formatted_string);
+            jd_ScratchArenaRelease(s);
+        }
         
         jd_TreeTraversePreorder(b);
     }

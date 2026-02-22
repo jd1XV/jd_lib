@@ -109,6 +109,7 @@ typedef struct jd_UIBoxRec {
     f32       layout_gap;
     jd_V2F    fixed_position;
     jd_V2F    reference_point;
+    jd_V2F    requested_size;
     
     struct jd_UIBoxRec* anchor_box;
     jd_V2F anchor_reference_point;
@@ -146,8 +147,9 @@ typedef struct jd_UIViewport {
     b32 roots_init;
     
     u32 box_count;
-    
     u64 frame_counter;
+    
+    b8  debug_mode;
     
     jd_InputEventSlice new_inputs;
     jd_InputEventSlice old_inputs;
