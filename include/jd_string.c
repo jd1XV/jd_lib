@@ -64,27 +64,37 @@ jd_String jd_StringGetPostfix(jd_String str, jd_String pattern) {
     jd_String s = str;
     for (u64 i = 0; i + pattern.count < str.count; i++) {
         if (jd_MemCmp(&str.mem[i], pattern.mem, pattern.count)) {
-            s.mem = &str.mem[i];
+            s.mem = &str.mem[i + 1];
             s.count = str.count - i;
-            return s;
         }
     }
     
     return s;
 }
 
-jd_String jd_StringGetPostfixLast(jd_String str, jd_String pattern) {
-    jd_String s = str;
-    for (u64 i = 0; i + pattern.count < str.count; i++) {
-        if (jd_MemCmp(&str.mem[i], pattern.mem, pattern.count)) {
-            s.mem = &str.mem[i];
-            s.count = str.count - i;
-            return s;
+jd_String jd_StringPushRemoveChars(jd_Arena* arena, jd_String str, jd_String strip) {
+    u64 removed_count = 0;
+    
+    jd_String n = jd_StringAlloc(arena, str.count);
+    u64 new_string_count = 0;
+    
+    for (u64 i = 0; i < str.count; i++) {
+        b32 found = false;
+        for (u64 j = 0; j < strip.count; j++) {
+            if (str.mem[i] == strip.mem[j]) {
+                found = true;
+                break;
+            }
         }
+        
+        if (found) continue;
+        n.mem[new_string_count++] = str.mem[i];
     }
     
-    return s;
+    n.count = new_string_count;
+    return n;
 }
+
 b32 jd_StringMatch(jd_String a, jd_String b) {
     if (a.count != b.count) return false;
     return jd_MemCmp(a.mem, b.mem, a.count);
@@ -161,6 +171,41 @@ static const c8 _jd_digit_table[36] =  {
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
 };
 
+jd_ExportFn jd_String jd_StringFromU64(jd_Arena* arena, u64 integer, u64 radix) {
+    u64 places = 0;
+    
+    c8 digit_table[36] = {
+        '0', '1',' 2', '3', '4', '5', '6', '7', '8', '9',
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+    };
+    
+    if (radix > integer) {
+        places = 1;
+    } else {
+        for (u64 quot = integer; quot > 0; quot /= radix) {
+            places++;
+        }
+    }
+    
+    
+    jd_String str = jd_StringAlloc(arena, places);
+    
+    u64 _integer = integer;
+    for (u64 i = 0; i < places; i++) {
+        if (i + 1 < places) {
+            u64 sub = jd_Pow_u64(radix, (places - i) - 1);
+            u64 dig = _integer / sub;
+            str.mem[i] = digit_table[dig];
+            _integer -= sub * dig;
+        } else {
+            str.mem[i] = digit_table[_integer];
+        }
+    }
+    
+    return str;
+}
+
+
 void jd_DStringAppendU8(jd_DString* d_string, u8 num, u32 radix) {
     u64 places = 0; 
     for (u64 quot = num; quot > 0; quot /= radix) {
@@ -220,4 +265,22 @@ void jd_DStringAppendI64(jd_DString* d_string, i64 num, u32 radix) {
 void jd_DStringAppendBin(jd_DString* d_string, u64 size, void* ptr) {
     u8* dst = jd_ArenaAlloc(d_string->arena, size);
     jd_MemCpy(dst, ptr, size);
+}
+
+u64 jd_U64FromString(jd_String number_s, u64 radix) {
+    u64 sum = 0;
+    
+    for (u64 i = 0; i < number_s.count; i++) {
+        if (number_s.mem[i] < 58 && number_s.mem[i] > 47) {
+            u64 add = number_s.mem[i] - 48;
+            u64 pow = jd_Pow_u64(radix, (number_s.count - i) - 1);
+            if (pow > 0) {
+                add *= pow;
+            }
+            
+            sum += add;
+        }
+    }
+    
+    return sum;
 }

@@ -14,6 +14,7 @@ typedef union jd_Timer {
 
 jd_ExportFn jd_ForceInline jd_Timer jd_TimerStart();
 jd_ExportFn jd_ForceInline jd_Timer jd_TimerStop(jd_Timer watch);
+jd_ExportFn jd_ForceInline void jd_Sleep(u32 ms);
 
 #define jd_FunctionTimer(fn, timer)\
 do { \

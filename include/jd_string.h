@@ -18,9 +18,11 @@ typedef struct jd_DString {
 
 jd_ExportFn jd_String jd_StrLit(c8* c_str);
 #define jd_StrConst(c_str) {c_str, sizeof(c_str) - 1}
+#define jd_StringAlloc(a, x) jd_ArenaAllocView(a, x + 1)
 jd_ExportFn jd_String jd_StringPush(jd_Arena* arena, jd_String str);
 jd_ExportFn jd_String jd_StringPushF(jd_Arena* arena, jd_String fmt_string, ...);
 jd_ExportFn jd_String jd_StringPushVAList(jd_Arena* arena, jd_String fmt_string, va_list list);
+jd_ExportFn jd_String jd_StringPushRemoveChars(jd_Arena* arena, jd_String str, jd_String strip);
 
 jd_ExportFn jd_String jd_StringGetPrefix(jd_String str, jd_String pattern);
 jd_ExportFn jd_String jd_StringGetPostfix(jd_String str, jd_String pattern);
@@ -44,6 +46,9 @@ jd_ExportFn void jd_DStringAppendI32(jd_DString* d_string, i32 num, u32 radix);
 jd_ExportFn void jd_DStringAppendU64(jd_DString* d_string, u64 num, u32 radix);
 jd_ExportFn void jd_DStringAppendI64(jd_DString* d_string, i64 num, u32 radix);
 jd_ExportFn void jd_DStringAppendBin(jd_DString* d_string, u64 size, void* ptr);
+
+jd_ExportFn u64 jd_U64FromString(jd_String number_s, u64 radix);
+jd_ExportFn jd_String jd_StringFromU64(jd_Arena* arena, u64 integer, u64 radix);
 
 #ifdef JD_IMPLEMENTATION
 #include "jd_string.c"

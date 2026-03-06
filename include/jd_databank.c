@@ -27,10 +27,22 @@ jd_DataNode* jd_DataBankGetRoot(jd_DataBank* bank) {
     return root;
 }
 
-u64 jd_DataBankGetPrimaryKey(jd_DataBank* bank) {
+u64 jd_DataBankGeneratePrimaryKey(jd_DataBank* bank) {
     jd_RWLockGet(bank->lock, jd_RWLock_Write);
     u64 key = bank->primary_key_index++;
     jd_RWLockRelease(bank->lock, jd_RWLock_Write);
+    return key;
+}
+
+u64 jd_DataBankGetRecordPrimaryKey(jd_DataNode* record) {
+    jd_RWLockGet(record->bank->lock, jd_RWLock_Read);
+    u64 key = 0;
+    if (record->value.type != jd_DataType_Record) {
+        jd_LogError("Cannot get primary key of non-record type.", jd_Error_APIMisuse, jd_Error_Fatal);
+    } else {
+        key = record->value.U64;
+    }
+    jd_RWLockRelease(record->bank->lock, jd_RWLock_Read);
     return key;
 }
 
@@ -103,7 +115,7 @@ jd_DataNode* jd_DataBankAddRecord(jd_DataNode* parent, jd_String key) {
         jd_LogError("Specified parent does not belong to a DataBank.", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     
-    u64 pk = jd_DataBankGetPrimaryKey(db);
+    u64 pk = jd_DataBankGeneratePrimaryKey(db);
     jd_DataNode* n = jd_DataBankAddRecordWithPK(parent, key, pk);
     
     return n;
@@ -204,6 +216,26 @@ jd_DataNode* jd_DataPointSet(jd_DataNode* record, jd_String key, jd_Value value)
         jd_TreeLinkLastChild(record, n);
     
     jd_RWLockRelease(record->lock, jd_RWLock_Write);
+    
+    return n;
+}
+
+jd_DataNode* jd_DataBankGetRecord(jd_DataNode* start, jd_String key) {
+    jd_DataNode* n = start;
+    if (!n) return n;
+    jd_TreeTraversePreorder(n);
+    if (!n) return n;
+    
+    while (n) {
+        if (jd_StringMatch(n->key, key)) {
+            return n;
+        }
+        
+        jd_TreeTraversePreorder(n);
+        while (n && n->value.type != jd_DataType_Record) {
+            jd_TreeTraversePreorder(n);
+        }
+    }
     
     return n;
 }
@@ -676,13 +708,52 @@ jd_DataFilter* jd_DataFilterPush(jd_Arena* arena, jd_DataFilter* parent, jd_Stri
             filter->value = value;
             break;
         }
-        
     }
     
     filter->rule = rule;
     jd_TreeLinkLastChild(parent, filter);
     
     return filter;
+}
+
+jd_DataFilter* jd_DataFilterPushOr(jd_Arena* arena, jd_DataFilter* filter, jd_String key, jd_Value value, jd_DataFilterRule rule) {
+    jd_DataFilter* f = jd_ArenaAlloc(arena, sizeof(*filter));
+    f->key = jd_StringPush(arena, key);
+    switch (value.type) {
+        case jd_DataType_None:
+        case jd_DataType_Root:
+        case jd_DataType_Count:
+        case jd_DataType_Bin: {
+            jd_LogError("Supplied value has invalid type for filter.", jd_Error_APIMisuse, jd_Error_Fatal);
+            break;
+        }
+        
+        case jd_DataType_String: {
+            if (value.string.count == 0) return 0;
+            f->value.type = jd_DataType_String;
+            f->value.string = jd_StringPush(arena, value.string);
+            break;
+        }
+        
+        default: {
+            f->value = value;
+            break;
+        }
+    }
+    
+    f->rule = rule;
+    if (!filter->or_chain) {
+        filter->or_chain = f;
+    } else {
+        jd_DataFilter* last = filter->or_chain;
+        while (last->next) {
+            last = last->next;
+        }
+        
+        last->or_chain = f;
+    }
+    
+    return f;
 }
 
 #if 0
@@ -698,9 +769,349 @@ jd_DataFilter* jd_DataFilterPush(jd_Arena* arena, jd_DataFilter* parent, jd_Stri
 
 */
 
-b32 jd_DataFilterEvaluate(jd_DataFilter* f, jd_DataNode* node, b32 case_sensitive) {
-    b32 eval = false;
+b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sensitive, jd_DArray* used_nodes) {
+    b32 eval = 0;
+    switch (n->value.type) {
+        case jd_DataType_None:
+        case jd_DataType_Root: 
+        case jd_DataType_Count: {
+            jd_LogError("Node type cannot be used with filter.", jd_Error_APIMisuse, jd_Error_Fatal);
+            break;
+        }
+        
+        case jd_DataType_Record: {
+            eval = true;
+            break;
+        }
+        
+        case jd_DataType_String: {
+            switch (f->rule) {
+                case jd_FilterRule_Equals: {
+                    eval = (jd_StringMatch(f->value.string, n->value.string));
+                    break;
+                }
+                
+                case jd_FilterRule_Contains: {
+                    
+#if 0                                
+                    if (case_sensitive)
+                        eval = (jd_StrContainsSubstr(n->value.string, f->value.string));
+                    else
+                        eval = (jd_StrContainsSubstrCaseInsensitive(n->value.string, f->value.string));
+#endif
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = !(jd_StringMatch(f->value.string, n->value.string));
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotContain: {
+                    
+#if 0                                
+                    if (case_sensitive)
+                        eval = !(jd_StrContainsSubstr(n->value.string, f->value.string));
+                    else
+                        eval = !(jd_StrContainsSubstrCaseInsensitive(n->value.string, f->value.string));
+#endif
+                    
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_u64: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.U64 > f->value.U64);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.U64 < f->value.U64);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.U64 >= f->value.U64);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.U64 <= f->value.U64);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.U64 == f->value.U64);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.U64 != f->value.U64);
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_u32: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.U32 > f->value.U32);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.U32 < f->value.U32);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.U32 >= f->value.U32);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.U32 <= f->value.U32);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.U32 == f->value.U32);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.U32 != f->value.U32);
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_b32: {
+            switch (f->rule) {
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.B32 == f->value.B32);
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.B32 != f->value.B32);
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_c8: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.C8 > f->value.C8);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.C8 < f->value.C8);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.C8 >= f->value.C8);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.C8 <= f->value.C8);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.C8 == f->value.C8);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.C8 != f->value.C8);
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_i64: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.I64 > f->value.I64);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.I64 < f->value.I64);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.I64 >= f->value.I64);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.I64 <= f->value.I64);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.I64 == f->value.I64);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.I64 != f->value.I64);
+                    break;
+                }
+            }
+            
+            break;
+        } 
+        
+        case jd_DataType_i32: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.I32 > f->value.I32);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.I32 < f->value.I32);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.I32 >= f->value.I32);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.I32 <= f->value.I32);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.I32 == f->value.I32);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.I32 != f->value.I32);
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_f32: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.F32 > f->value.F32);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.F32 < f->value.F32);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.F32 >= f->value.F32);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.F32 <= f->value.F32);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.F32 == f->value.F32);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.F32 != f->value.F32);
+                    break;
+                }
+            }
+            
+            break;
+        }
+        
+        case jd_DataType_f64: {
+            switch (f->rule) {
+                case jd_FilterRule_GreaterThan: {
+                    eval = (n->value.F64 > f->value.F64);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThan: {
+                    eval = (n->value.F64 < f->value.F64);
+                    break;
+                }
+                
+                case jd_FilterRule_GreaterThanOrEq: {
+                    eval = (n->value.F64 >= f->value.F64);
+                    break;
+                }
+                
+                case jd_FilterRule_LessThanOrEq: {
+                    eval = (n->value.F64 <= f->value.F64);
+                    break;
+                }
+                
+                case jd_FilterRule_Equals: {
+                    eval = (n->value.F64 == f->value.F64);
+                    
+                    break;
+                }
+                
+                case jd_FilterRule_DoesNotEqual: {
+                    eval = (n->value.F64 != f->value.F64);
+                    break;
+                }
+            }
+            
+            break;
+        }
+    }
     
+    for (u64 i = 0; i < used_nodes->count; i++) {
+        u64* used_ptr = jd_DArrayGetIndex(used_nodes, i);
+        jd_DataNode* used = jd_ReadPtrAtAddr(used_ptr);
+        
+        if (n == used) {
+            eval = false;
+        }
+    }
+    return eval;
+}
+
+b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, b32 case_sensitive) {
     typedef struct KeyPair {
         jd_DataFilter* p;
         jd_DataFilter* f;
@@ -725,369 +1136,236 @@ b32 jd_DataFilterEvaluate(jd_DataFilter* f, jd_DataNode* node, b32 case_sensitiv
         jd_TreeTraversePreorder(f);
     }
     
-    
     while (n != 0 && n != node->next) {
         for (u64 i = 0; i < keypairs->count; i++) {
             KeyPair* kp = jd_DArrayGetIndex(keypairs, i);
-            if (!n->parent) continue;
-            b32 parent_match = (jd_StringMatch(kp->p->key, n->parent->key) && kp->p->value.type == n->parent->value.type);
-            b32 child_match =  (jd_StringMatch(kp->f->key, n->key) && kp->f->value.type == n->value.type);
-            if (parent_match && child_match) {
-                b32 eval = false;
-                
-                switch (n->value.type) {
-                    case jd_DataType_None:
-                    case jd_DataType_Root: 
-                    case jd_DataType_Count: {
-                        jd_LogError("Node type cannot be used with filter.", jd_Error_APIMisuse, jd_Error_Fatal);
+            jd_DataFilter* f = kp->f;
+            b32 eval = false;
+            while (f) {
+                if (!n->parent) continue;
+                b32 parent_match = (jd_StringMatch(kp->p->key, n->parent->key) && kp->p->value.type == n->parent->value.type);
+                b32 child_match =  (jd_StringMatch(kp->f->key, n->key) && kp->f->value.type == n->value.type);
+                if (parent_match && child_match) {
+                    eval = jd_Internal_DataFilterCompare(f, n, case_sensitive, used_nodes);
+                    if (eval) {
+                        jd_DArrayPopIndex(keypairs, i);
+                        jd_DArrayPushBack(used_nodes, n);
                         break;
                     }
                     
-                    case jd_DataType_Record: {
-                        eval = true;
-                        break;
-                    }
-                    
-                    case jd_DataType_String: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_Equals: {
-                                eval = (jd_StringMatch(kp->f->value.string, n->value.string));
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Contains: {
-                                
-#if 0                                
-                                if (case_sensitive)
-                                    eval = (jd_StrContainsSubstr(n->value.string, kp->f->value.string));
-                                else
-                                    eval = (jd_StrContainsSubstrCaseInsensitive(n->value.string, kp->f->value.string));
-#endif
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = !(jd_StringMatch(kp->f->value.string, n->value.string));
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotContain: {
-                                
-#if 0                                
-                                if (case_sensitive)
-                                    eval = !(jd_StrContainsSubstr(n->value.string, kp->f->value.string));
-                                else
-                                    eval = !(jd_StrContainsSubstrCaseInsensitive(n->value.string, kp->f->value.string));
-#endif
-                                
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_u64: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.U64 > kp->f->value.U64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.U64 < kp->f->value.U64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.U64 >= kp->f->value.U64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.U64 <= kp->f->value.U64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.U64 == kp->f->value.U64);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.U64 != kp->f->value.U64);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_u32: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.U32 > kp->f->value.U32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.U32 < kp->f->value.U32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.U32 >= kp->f->value.U32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.U32 <= kp->f->value.U32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.U32 == kp->f->value.U32);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.U32 != kp->f->value.U32);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_b32: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.B32 == kp->f->value.B32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.B32 != kp->f->value.B32);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_c8: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.C8 > kp->f->value.C8);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.C8 < kp->f->value.C8);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.C8 >= kp->f->value.C8);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.C8 <= kp->f->value.C8);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.C8 == kp->f->value.C8);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.C8 != kp->f->value.C8);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_i64: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.I64 > kp->f->value.I64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.I64 < kp->f->value.I64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.I64 >= kp->f->value.I64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.I64 <= kp->f->value.I64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.I64 == kp->f->value.I64);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.I64 != kp->f->value.I64);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    } 
-                    
-                    case jd_DataType_i32: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.I32 > kp->f->value.I32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.I32 < kp->f->value.I32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.I32 >= kp->f->value.I32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.I32 <= kp->f->value.I32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.I32 == kp->f->value.I32);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.I32 != kp->f->value.I32);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_f32: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.F32 > kp->f->value.F32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.F32 < kp->f->value.F32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.F32 >= kp->f->value.F32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.F32 <= kp->f->value.F32);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.F32 == kp->f->value.F32);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.F32 != kp->f->value.F32);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
-                    
-                    case jd_DataType_f64: {
-                        switch (kp->f->rule) {
-                            case jd_FilterRule_GreaterThan: {
-                                eval = (n->value.F64 > kp->f->value.F64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThan: {
-                                eval = (n->value.F64 < kp->f->value.F64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_GreaterThanOrEq: {
-                                eval = (n->value.F64 >= kp->f->value.F64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_LessThanOrEq: {
-                                eval = (n->value.F64 <= kp->f->value.F64);
-                                break;
-                            }
-                            
-                            case jd_FilterRule_Equals: {
-                                eval = (n->value.F64 == kp->f->value.F64);
-                                
-                                break;
-                            }
-                            
-                            case jd_FilterRule_DoesNotEqual: {
-                                eval = (n->value.F64 != kp->f->value.F64);
-                                break;
-                            }
-                        }
-                        
-                        break;
-                    }
                 }
-                
-                for (u64 i = 0; i < used_nodes->count; i++) {
-                    u64* used_ptr = jd_DArrayGetIndex(used_nodes, i);
-                    jd_DataNode* used = jd_ReadPtrAtAddr(used_ptr);
-                    
-                    if (n == used) {
-                        eval = false;
-                    }
-                }
-                
-                if (eval) {
-                    jd_DArrayPopIndex(keypairs, i);
-                    jd_DArrayPushBack(used_nodes, n);
-                }
-                break;
+                f = f->or_chain;
             }
             
+            if (eval) break;
         }
         
         jd_TreeTraversePreorder(n);
-        
     }
     
     b32 ret = (keypairs->count == 0);
     jd_DArrayRelease(keypairs);
     jd_DArrayRelease(used_nodes);
     return ret;
+}
+
+
+static i32 jd_DataBank_Internal_QSortAsc(void* context, const void* a, const void* b) {
+    jd_DataNode** pa = (jd_DataNode**)a;
+    jd_DataNode** pb = (jd_DataNode**)b;
+    
+    if (!a || !b) return 0;
+    if ((*pa)->value.type != jd_DataType_Record ||
+        (*pa)->value.type != jd_DataType_Record) return 0;
+    
+    jd_String* match = (jd_String*)context;
+    jd_Value va = jd_DataPointGetValue(*pa, *match);
+    jd_Value vb = jd_DataPointGetValue(*pb, *match);
+    
+    if (va.type == jd_DataType_None) return -1;
+    if (vb.type == jd_DataType_None) return  1;
+    
+    if (va.type != vb.type) return 0;
+    
+    switch (va.type) {
+        case jd_DataType_String: {
+            i32 result = 0;
+            for (u64 i = 0; i < jd_Min(va.string.count, vb.string.count); i++) {
+                result = va.string.mem[i] - vb.string.mem[i];
+                if (result != 0) break;
+            }
+            if (result == 0)
+                result = (va.string.count - vb.string.count);
+            return result;
+        }
+        
+        case jd_DataType_u64: {
+            if (va.U64 > vb.U64) return 1;
+            if (va.U64 < vb.U64) return -1;
+            return 0;
+        }
+        
+        case jd_DataType_u32: {
+            if (va.U32 > vb.U32) return 1;
+            if (va.U32 < vb.U32) return -1;
+            return 0;
+        }
+        
+        case jd_DataType_b32: {
+            return va.B32 - vb.B32;
+        }
+        
+        case jd_DataType_c8: {
+            return va.C8 - vb.C8;
+        }
+        
+        case jd_DataType_i64: {
+            return va.I64 - vb.I64;
+        } 
+        
+        case jd_DataType_i32: {
+            return va.I32 - vb.I32;
+        }
+        
+        case jd_DataType_f32: {
+            return va.F32 - vb.F32;
+        }
+        
+        case jd_DataType_f64: {
+            return va.F64 - vb.F64;
+        }
+    }
+    return 0;
+}
+
+static i32 jd_DataBank_Internal_QSortDesc(void* context, const void* a, const void* b) {
+    jd_DataNode** pa = (jd_DataNode**)a;
+    jd_DataNode** pb = (jd_DataNode**)b;
+    
+    if (!a || !b) return 0;
+    if ((*pa)->value.type != jd_DataType_Record ||
+        (*pa)->value.type != jd_DataType_Record) return 0;
+    
+    jd_String* match = (jd_String*)context;
+    jd_Value va = jd_DataPointGetValue(*pa, *match);
+    jd_Value vb = jd_DataPointGetValue(*pb, *match);
+    
+    if (va.type == jd_DataType_None) return  1;
+    if (vb.type == jd_DataType_None) return -1;
+    if (va.type != vb.type) return 0;
+    
+    switch (va.type) {
+        case jd_DataType_String: {
+            i32 result = 0;
+            for (u64 i = 0; i < jd_Min(va.string.count, vb.string.count); i++) {
+                result = vb.string.mem[i] - va.string.mem[i];
+                if (result != 0) break;
+            }
+            if (result == 0)
+                result = (vb.string.count - va.string.count);
+            return result;
+        }
+        
+        case jd_DataType_u64: {
+            if (vb.U64 > va.U64) return 1;
+            if (vb.U64 < va.U64) return -1;
+            return 0;
+        }
+        
+        case jd_DataType_u32: {
+            if (vb.U32 > va.U32) return 1;
+            if (vb.U32 < va.U32) return -1;
+            return 0;
+        }
+        
+        case jd_DataType_b32: {
+            return vb.B32 - va.B32;
+        }
+        
+        case jd_DataType_c8: {
+            return vb.C8 - va.C8;
+        }
+        
+        case jd_DataType_i64: {
+            return vb.I64 - va.I64;
+        } 
+        
+        case jd_DataType_i32: {
+            return vb.I32 - va.I32;
+        }
+        
+        case jd_DataType_f32: {
+            return vb.F32 - va.F32;
+        }
+        
+        case jd_DataType_f64: {
+            return vb.F64 - va.F64;
+        }
+    }
+    
+    return 0;
+}
+
+void jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on_key, jd_DataPointSortRule rule) {
+    if (!first_child) {
+        jd_LogError("Invalid node provided.", jd_Error_APIMisuse, jd_Error_Critical);
+        return;
+    }
+    jd_DataNode* p = first_child->parent;
+    if (!p) {
+        jd_LogError("Invalid node provided.", jd_Error_APIMisuse, jd_Error_Critical);
+    }
+    
+    jd_RWLockGet(p->lock, jd_RWLock_Write);
+    
+    jd_DArray* sort_array = jd_DArrayCreate(2048, sizeof(jd_DataNode*));
+    jd_DArray* others     = jd_DArrayCreate(2048, sizeof(jd_DataNode*));
+    jd_String first_key = first_child->key;
+    jd_DataType type = first_child->value.type;
+    
+    jd_DataNode* first_other = 0;
+    jd_DataNode* last_other = 0;
+    
+    jd_DataNode* n = p->first_child;
+    while (n != 0) {
+        if (jd_StringMatch(n->key, first_key) && type == n->value.type) {
+            jd_DArrayPushBack(sort_array, &n);
+        } else {
+            jd_DArrayPushBack(others, &n);
+        }
+        
+        n = n->next;
+    }
+    
+    switch (rule) {
+        case jd_SortRule_Ascending: {
+            qsort_s(sort_array->view.mem, sort_array->count, sizeof(jd_DataNode*), jd_DataBank_Internal_QSortAsc, &sort_on_key);
+            break;
+        }
+        
+        case jd_SortRule_Descending: {
+            qsort_s(sort_array->view.mem, sort_array->count, sizeof(jd_DataNode*), jd_DataBank_Internal_QSortDesc, &sort_on_key);
+            break;
+        }
+    }
+    
+    p->first_child = 0;
+    p->last_child  = 0;
+    
+    for (u64 i = 0; i < sort_array->count; i++) {
+        jd_DataNode** nodep = jd_DArrayGetIndex(sort_array, i);
+        jd_DataNode* node = *nodep;
+        jd_TreeLinkLastChild(p, node);
+    }
+    
+    for (u64 i = 0; i < others->count; i++) {
+        jd_DataNode** nodep = jd_DArrayGetIndex(others, i);
+        jd_DataNode* node = *nodep;
+        jd_TreeLinkLastChild(p, node);
+    }
+    
+    jd_DArrayRelease(sort_array);
+    jd_DArrayRelease(others);
+    
+    jd_RWLockRelease(p->lock, jd_RWLock_Write);
 }

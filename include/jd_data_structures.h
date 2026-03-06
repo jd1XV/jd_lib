@@ -194,9 +194,11 @@ typedef struct jd_DArray {
     u64       count;
     jd_View   view;
     jd_RWLock* lock;
+    jd_ScratchArena scratch;
 } jd_DArray;
 
 jd_ExportFn jd_DArray* jd_DArrayCreate(u64 max, u64 stride);
+jd_ExportFn jd_DArray* jd_DArrayOnArena(jd_Arena* arena, u64 max, u64 stride);
 jd_ExportFn jd_DArray* jd_DArrayCreateWithLock(u64 max, u64 stride);
 jd_ExportFn void*      jd_DArrayGetIndex(jd_DArray* arr, u64 index);
 jd_ExportFn void*      jd_DArrayGetBack(jd_DArray* arr);

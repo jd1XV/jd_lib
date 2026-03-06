@@ -14,6 +14,10 @@ b32 jd_DiskPathDelete(jd_String path) {
     return DeleteFileA(path.mem);
 }
 
+b32 jd_DiskDirectoryCreate(jd_String path) {
+    return CreateDirectoryA(path.mem, 0);
+}
+
 u64 jd_DiskGetFileLastMod(jd_String path) {
     WIN32_FILE_ATTRIBUTE_DATA data = {0};
     
@@ -44,7 +48,7 @@ jd_File jd_DiskFileReadFromPath(jd_Arena* arena, jd_String path, b32 null_termin
     
     HANDLE handle = CreateFileA(path.mem, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (handle == INVALID_HANDLE_VALUE) {
-        // error
+        u32 error = GetLastError();
         return file;
     }
     
@@ -64,6 +68,62 @@ jd_File jd_DiskFileReadFromPath(jd_Arena* arena, jd_String path, b32 null_termin
         file.size += 1;
     
     file.mem = jd_ArenaAlloc(arena, sizeof(u8) * file.size);
+    jd_MemCpy(file.mem, view, file.size);
+    
+    UnmapViewOfFile(view);
+    CloseHandle(fmo_handle);
+    CloseHandle(handle);
+    
+    return file;
+}
+
+jd_File jd_DiskFileReadPortionFromPath(jd_Arena* arena, jd_String path, b32 null_terminate_portion, u64 index, u64 size) {
+    jd_File file = {0};
+    if (size == 0) {
+        jd_LogError("Requested file portion has size of 0", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    SYSTEM_INFO sysinfo = {0};
+    GetSystemInfo(&sysinfo);
+    
+    u32 granularity = sysinfo.dwAllocationGranularity;
+    
+    if (size < granularity || index < granularity) {
+        jd_LogError("Requested file portion size or index is less than system granularity. This function should be used on large files, with a minimum portion size of 64kb", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    HANDLE handle = CreateFileA(path.mem, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (handle == INVALID_HANDLE_VALUE) {
+        // error
+        return file;
+    }
+    
+    LARGE_INTEGER li_size = {0};
+    
+    if (GetFileSizeEx(handle, &li_size) == 0) {
+        return file;
+    }
+    
+    if (index >= li_size.QuadPart) {
+        jd_LogError("Index exceeds size of file. Not breaking on file.size == 0 here is an error!", jd_Error_BadInput, jd_Error_Warning);
+        return file;
+    }
+    
+    if (li_size.QuadPart < (index + size)) {
+        jd_LogError("Requested file portion exceeds size of the file, returning remainder of file from index", jd_Error_BadInput, jd_Error_Warning);
+        size = 0; // On Windows, this will read from the index to the end of the file
+    }
+    
+    
+    HANDLE fmo_handle = CreateFileMappingA(handle, NULL, PAGE_READONLY, 0, 0, NULL);
+    
+    file.size = size;
+    
+    u8* view = MapViewOfFile(fmo_handle, FILE_MAP_READ, jd_GetHiWordU64(index), jd_GetLoWordU64(index), size);
+    
+    u64 final_size = (null_terminate_portion) ? file.size + 1 : file.size;
+    
+    file.mem = jd_ArenaAlloc(arena, sizeof(u8) * final_size);
     jd_MemCpy(file.mem, view, file.size);
     
     UnmapViewOfFile(view);

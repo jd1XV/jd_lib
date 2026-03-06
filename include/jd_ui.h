@@ -207,47 +207,59 @@ typedef struct jd_UIBoxConfig {
 
 typedef jd_UIBoxConfig jd_UIButtonConfig;
 
-jd_ExportFn jd_UIResult    jd_UIBox(jd_UIBoxConfig* cfg);
-jd_ExportFn jd_UIResult    jd_UIBoxBegin(jd_UIBoxConfig* cfg);
-jd_ExportFn void           jd_UIBoxEnd();
+jd_ExportFn jd_UIViewport* jd_UIInitForWindow(jd_Window* window);
+
 jd_ExportFn jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport);
 jd_ExportFn void           jd_UIEnd();
-jd_ExportFn jd_UIViewport* jd_UIInitForWindow(jd_Window* window);
+
+jd_ExportFn jd_UIResult    jd_UIBoxBegin(jd_UIBoxConfig* cfg);
+jd_ExportFn void           jd_UIBoxEnd();
+jd_ExportFn jd_UIResult    jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, jd_UIBoxFlags flags);
+jd_ExportFn jd_UIResult    jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
+jd_ExportFn void           jd_UIRegionEnd();
+
 jd_ExportFn jd_ForceInline void jd_UISeedPushU32(u32 v);
+jd_ExportFn jd_ForceInline void jd_UISeedPushU64(u64 v);
 jd_ExportFn jd_ForceInline void jd_UISeedPushString(jd_String string);
 jd_ExportFn jd_ForceInline void jd_UISeedPushStringF(jd_String fmt, ...);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
-jd_ExportFn jd_ForceInline void jd_UIStylePush(jd_UIStyle* style);
-jd_ExportFn jd_ForceInline void jd_UIStylePop();
-jd_ExportFn jd_ForceInline void jd_UIStyleGet();
+
+jd_ExportFn jd_ForceInline void        jd_UIStylePush(jd_UIStyle* style);
+jd_ExportFn jd_ForceInline void        jd_UIStylePop();
+jd_ExportFn jd_ForceInline jd_UIStyle* jd_UIStyleGet();
+
 jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_String font_id);
 jd_ExportFn jd_ForceInline void jd_UIFontPop();
+
 jd_ExportFn jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent();
-jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box);
+jd_ExportFn jd_ForceInline jd_V2F         jd_UIParentSize(jd_UIBoxRec* box);
+jd_ExportFn jd_ForceInline jd_UIBoxRec*   jd_UIGetLastBox();
+
 jd_ExportFn jd_UIResult jd_UIButton(jd_String label, jd_UISize size, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UILabel(jd_String label);
+jd_ExportFn jd_UIResult jd_UILabelSized(jd_String label, jd_UISize size, jd_V2F alignment, jd_UIBoxFlags flags);
+jd_ExportFn jd_UIResult jd_UILabelGrow(jd_String label, jd_V2F alignment);
 jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label);
 jd_ExportFn jd_UIResult jd_UIListButton(jd_String label);
 jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
-jd_ExportFn jd_UIResult jd_UIRegionBegin(jd_String string_id, jd_UIStyle* style, jd_UISize size, jd_UILayoutDir dir, f32 gap, jd_UIBoxFlags flags);
-jd_ExportFn jd_UIResult jd_UIRegionBeginAnchored(jd_String string_id, jd_UIStyle* style, jd_UIBoxRec* anchor_box, jd_V2F anchor_to, jd_V2F anchor_from, jd_UISize size, jd_UILayoutDir dir, f32 gap, b8 clickable);
 jd_ExportFn jd_UIResult jd_UIRowGrowBegin(jd_String string_id, jd_UIStyle* style, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIColGrowBegin(jd_String string_id, jd_UIStyle* style, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size);
 jd_ExportFn jd_UIResult jd_UIWindowRegionBegin(jd_V2F min_size, jd_UIStyle* style, jd_UILayoutDir dir, f32 gap);
 jd_ExportFn jd_UIResult jd_UIGrowPadding(jd_String string_id);
-jd_ExportFn jd_UIBoxRec* jd_UIGetLastBox();
-jd_ExportFn void        jd_UIRegionEnd();
+jd_ExportFn jd_UIResult jd_UIFixedPadding(jd_String string_id, jd_V2F fixed_size);
+jd_ExportFn jd_UIResult jd_UIFixedSizeLabel(jd_String label, jd_V2F alignment, jd_V2F size);
 
 static jd_UIStyle jd_default_style_dark = {
     .bg_color = {.1f, .1f, .1f, 1.0f},
     .bg_color_hovered = {.2f, .2f, .2f, 1.0f},
     .bg_color_active = {.00f, .00f, .00f, 1.0f},
     .label_color = {.9f, .9f, .9f, 1.0f},
-    .label_padding = {10.0f, 10.0f},
+    .label_padding = {25.0f, 25.0f},
     .softness = 0.0f,
     .rounding = 0.0f,
-    .thickness = 0.0f
+    .thickness = 0.0f,
+    .padding = 0.0f
 };
 
 static jd_UIStyle jd_invisible_style = {

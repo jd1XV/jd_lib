@@ -1,10 +1,10 @@
 jd_DArray* jd_DArrayCreate(u64 max, u64 stride) {
-    if (stride <= 0) 
-        return 0; // err
+    if (stride == 0) {
+        jd_LogError("Cannot create jd_DArray of 0-sized elements", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
     u64 a_cap = max * stride;
     jd_Arena* arena = jd_ArenaCreate(jd_Max(max * stride, KILOBYTES(64)), jd_Max(stride, KILOBYTES(4)));
-    if (!arena) // err 
-        return 0;
     
     jd_DArray* arr = jd_ArenaAlloc(arena, sizeof(jd_DArray));
     arr->view.mem = arena->mem + arena->pos;
@@ -14,7 +14,9 @@ jd_DArray* jd_DArrayCreate(u64 max, u64 stride) {
 }
 
 jd_ForceInline void* jd_DArrayGetIndex(jd_DArray* d_array, u64 index) {
-    if (index >= d_array->count) return 0;
+    if (index >= d_array->count) 
+        return 0;
+    
     return (void*)((u8*)(d_array->view.mem + (d_array->stride * index)));
 }
 
@@ -24,7 +26,9 @@ jd_ForceInline void* jd_DArrayGetBack(jd_DArray* d_array) {
 
 jd_ForceInline void* jd_DArrayPushBack(jd_DArray* d_array, void* data) { 
     void* ptr = jd_ArenaAlloc(d_array->arena, d_array->stride);
-    if (!ptr) return 0;
+    if (!ptr) {
+        jd_LogError("Could not allocate new element in jd_DArray", jd_Error_OutOfMemory, jd_Error_Fatal);
+    }
     
     if (data) {
         jd_MemCpy(ptr, data, d_array->stride);
@@ -38,7 +42,9 @@ jd_ForceInline void* jd_DArrayPushBack(jd_DArray* d_array, void* data) {
 
 jd_ForceInline void* jd_DArrayPushBackV(jd_DArray* d_array, u64 count, void* data) {
     void* ptr = jd_ArenaAlloc(d_array->arena, (d_array->stride * count));
-    if (!ptr) return 0;
+    if (!ptr) {
+        jd_LogError("Could not allocate new element in jd_DArray", jd_Error_OutOfMemory, jd_Error_Fatal);
+    }
     
     if (data) {
         jd_MemCpy(ptr, data, (d_array->stride * count));
@@ -108,8 +114,13 @@ jd_ForceInline b32 jd_DArrayClearNoDecommit(jd_DArray* d_array) {
     return true;
 }
 
-jd_ForceInline b32 jd_DArrayClearToIndex(jd_DArray* d_array, u64 index) { 
-    jd_ArenaPopTo(d_array->arena, sizeof(jd_DArray) + (d_array->stride * index));
+jd_ForceInline b32 jd_DArrayClearToIndex(jd_DArray* d_array, u64 index) {
+    if (d_array->scratch.arena) {
+        jd_ArenaPopTo(d_array->scratch.arena, d_array->scratch.pos + (d_array->stride * index));
+    } else {
+        jd_ArenaPopTo(d_array->arena, sizeof(jd_DArray) + (d_array->stride * index));
+    }
+    
     d_array->count = index;
     d_array->view.size = index * d_array->stride;
     return true;

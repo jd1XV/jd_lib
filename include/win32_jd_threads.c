@@ -7,10 +7,10 @@ typedef struct jd_Thread {
 } jd_Thread;
 
 typedef struct jd_ThreadPool {
-    jd_Arena*  arena;
-    jd_Thread** threads;
-    u64        count;
-    u64        count_closed;
+    jd_Arena*    arena;
+    jd_Thread**  threads;
+    u64          count;
+    volatile u64 count_closed;
     jd_ThreadPoolJob* job_head;
     jd_ThreadPoolJob* job_tail;
     
@@ -105,7 +105,12 @@ void jd_ThreadPoolDestroy(jd_ThreadPool* tp) {
     
     jd_CondVarWakeAll(tp->wake_cond);
     
-    while (tp->count_closed != tp->count);
+    u64 threads_closed = 0;
+    while (threads_closed != tp->count) {
+        jd_UserLockGet(tp->lock);
+        threads_closed = tp->count_closed;
+        jd_UserLockRelease(tp->lock);
+    }
     
     jd_UserLockDelete(tp->lock);
     jd_ArenaRelease(tp->arena);

@@ -18,6 +18,7 @@ void _jd_ErrorDebugPrint(u64 index, jd_DString* d_string) {
 
 void _jd_ErrorToString(jd_Error* err, jd_DString* d_string) {
     u64 begin_count = d_string->count;
+    jd_DStringAppend(d_string, jd_StrLit("\n"));
     jd_DStringAppend(d_string, _jd_error_print_indicators[err->severity]);
     jd_DStringAppend(d_string, err->msg);
     jd_DStringAppend(d_string, jd_StrLit("\n"));

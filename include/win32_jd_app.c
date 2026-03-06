@@ -361,12 +361,15 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
 }
 
 void jd_AppLoadSystemFont(jd_Arena* arena) {
-    jd_File segoe_ui = jd_DiskFileReadFromPath(arena, jd_StrLit("C:\\Windows\\Fonts\\segoeui.ttf"), false);
-    jd_File icons    = jd_DiskFileReadFromPath(arena, jd_StrLit("assets/jd_font_custom.ttf"), false);
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+    jd_File segoe_ui = jd_DiskFileReadFromPath(s.arena, jd_StrLit("C:\\Windows\\Fonts\\segoeui.ttf"), false);
+    jd_File icons    = jd_DiskFileReadFromPath(s.arena, jd_StrLit("assets/jd_font_custom.ttf"), false);
     
     jd_FontCreateEmpty(jd_StrLit("OS_BaseFontWindows"), MEGABYTES(32), 16);
-    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFontWindows"), segoe_ui, &jd_unicode_range_basic_latin, 11, 192);
+    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFontWindows"), segoe_ui, &jd_unicode_range_bmp, 11, 192);
     jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFontWindows"), icons, &jd_unicode_range_all, 11, 192);
+    
+    jd_ScratchArenaRelease(s);
 }
 
 jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {

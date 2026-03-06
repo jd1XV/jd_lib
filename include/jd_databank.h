@@ -79,7 +79,7 @@ typedef struct jd_DataBank {
     jd_DataType disabled_types;
     
     jd_DataNode* primary_key_hash_table;
-    u64           primary_key_hash_table_slot_count;
+    u64          primary_key_hash_table_slot_count;
     
     jd_DataNode* root;
 } jd_DataBank;
@@ -106,20 +106,32 @@ typedef enum jd_DataFilterRule {
     jd_FilterRule_Count
 } jd_DataFilterRule;
 
+typedef enum jd_DataPointSortRule {
+    jd_SortRule_Ascending,
+    jd_SortRule_Descending,
+    jd_SortRule_Count
+} jd_DataPointSortRule;
+
 typedef struct jd_DataFilter {
     jd_String key;
     jd_Value  value;
     jd_DataFilterRule rule;
+    
+    struct jd_DataFilter* or_chain;
+    
     jd_Node(jd_DataFilter);
 } jd_DataFilter;
 
 jd_ExportFn jd_DataFilter* jd_DataFilterCreate(jd_Arena* arena, jd_String key);
 jd_ExportFn jd_DataFilter* jd_DataFilterPush(jd_Arena* arena, jd_DataFilter* parent, jd_String key, jd_Value value, jd_DataFilterRule rule);
-jd_ExportFn b32            jd_DataFilterEvaluate(jd_DataFilter* filter, jd_DataNode* n, b32 case_sensitive);
+jd_ExportFn jd_DataFilter* jd_DataFilterPushOr(jd_Arena* arena, jd_DataFilter* filter, jd_String key, jd_Value value, jd_DataFilterRule rule);
+jd_ExportFn b32            jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* filter, jd_DataNode* n, b32 case_sensitive);
 
-jd_ExportFn jd_DataBank*  jd_DataBankCreate(jd_DataBankConfig* config);
-jd_ExportFn jd_DFile*     jd_DataBankSerialize(jd_DataBank* bank);
-jd_ExportFn jd_DataBank*  jd_DataBankDeserialize(jd_File view);
+jd_ExportFn void           jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on_key, jd_DataPointSortRule rule);
+
+jd_ExportFn jd_DataBank*   jd_DataBankCreate(jd_DataBankConfig* config);
+jd_ExportFn jd_DFile*      jd_DataBankSerialize(jd_DataBank* bank);
+jd_ExportFn jd_DataBank*   jd_DataBankDeserialize(jd_File view);
 
 jd_ExportFn jd_DataNode*   jd_DataBankGetRoot(jd_DataBank* bank);
 
@@ -127,9 +139,12 @@ jd_ExportFn jd_DataNode*   jd_DataBankAddRecord(jd_DataNode* parent, jd_String k
 jd_ExportFn jd_DataNode*   jd_DataBankAddRecordWithPK(jd_DataNode* parent, jd_String key, u64 primary_key);
 jd_ExportFn jd_DataNode*   jd_DataPointSet(jd_DataNode* record, jd_String key, jd_Value value);
 jd_ExportFn jd_DataNode*   jd_DataPointGet(jd_DataNode* record, jd_String key);
+jd_ExportFn u64            jd_DataBankGetRecordPrimaryKey(jd_DataNode* record);
 jd_ExportFn jd_Value       jd_DataPointGetValue(jd_DataNode* record, jd_String key);
 jd_ExportFn jd_DataNode*   jd_DataBankGetRecordWithID(jd_DataBank* bank, u64 primary_key);
 jd_ExportFn jd_DataNode*   jd_DataBankCopySubtree(jd_Arena arena, jd_DataNode* subtree_root);
+
+jd_ExportFn jd_DataNode*   jd_DataBankGetRecord(jd_DataNode* start, jd_String key);
 
 jd_ExportFn jd_ForceInline jd_Value jd_ValueCastString(jd_String string);
 jd_ExportFn jd_ForceInline jd_Value jd_ValueCastBin(jd_View view);

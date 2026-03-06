@@ -22,25 +22,25 @@ static jd_Internal_UIState _jd_internal_ui_state = {0};
 #define jd_UIViewports_Max      256
 #define jd_UIBox_HashTable_Size KILOBYTES(1)
 
-jd_ExportFn jd_V2F jd_UIParentSize(jd_UIBoxRec* box) {
+jd_V2F jd_UIParentSize(jd_UIBoxRec* box) {
     if (box->parent) {
         return box->parent->rect.max;
     } else return box->vp->size;
 }
 
-jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent() {
+jd_UIViewport* jd_UIViewportGetCurrent() {
     return &_jd_internal_ui_state.viewports[_jd_internal_ui_state.active_viewport];
 }
 
-jd_ForceInline jd_String _jd_UIStringGetDisplayPart(jd_String str) {
+jd_String _jd_UIStringGetDisplayPart(jd_String str) {
     return jd_StringGetPrefix(str, jd_StrLit("##"));
 }
 
-jd_ForceInline jd_String _jd_UIStringGetHashPart(jd_String str) {
+jd_String _jd_UIStringGetHashPart(jd_String str) {
     return jd_StringGetPostfix(str, jd_StrLit("###"));
 }
 
-jd_ExportFn jd_UITag jd_UITagFromString(jd_String str) {
+jd_UITag jd_UITagFromString(jd_String str) {
     if (!str.count) jd_LogError("UI Error: Cannot create a tag from an empty string", jd_Error_APIMisuse, jd_Error_Fatal);
     u32* seed = jd_DArrayGetBack(_jd_internal_ui_state.seeds);
     if (!seed) jd_LogError("UI Error: Seed stack is empty!", jd_Error_MissingResource, jd_Error_Fatal);
@@ -53,25 +53,32 @@ jd_ExportFn jd_UITag jd_UITagFromString(jd_String str) {
     return t;
 }
 
-jd_ExportFn jd_ForceInline void jd_UISeedPushTag(jd_UITag tag) {
+void jd_UISeedPushTag(jd_UITag tag) {
     jd_DArrayPushBack(_jd_internal_ui_state.seeds, &tag.key);
 }
 
-jd_ExportFn jd_ForceInline void jd_UISeedPushString(jd_String string) {
+void jd_UISeedPushString(jd_String string) {
     u32* seed = jd_DArrayGetBack(_jd_internal_ui_state.seeds);
     if (!seed) jd_LogError("UI Error: Seed stack is empty!", jd_Error_APIMisuse, jd_Error_Fatal);
     u32 hash = jd_HashStrToU32(string, *seed);
     jd_DArrayPushBack(_jd_internal_ui_state.seeds, &hash);
 }
 
-jd_ExportFn jd_ForceInline void jd_UISeedPushU32(u32 v) {
+void jd_UISeedPushU32(u32 v) {
     u32* seed = jd_DArrayGetBack(_jd_internal_ui_state.seeds);
     if (!seed) jd_LogError("UI Error: Seed stack is empty!", jd_Error_APIMisuse, jd_Error_Fatal);
     u32 hash = jd_HashU32toU32(v, *seed);
     jd_DArrayPushBack(_jd_internal_ui_state.seeds, &hash);
 }
 
-jd_ExportFn jd_ForceInline void jd_UISeedPushStringF(jd_String fmt, ...) {
+void jd_UISeedPushU64(u64 v) {
+    u32* seed = jd_DArrayGetBack(_jd_internal_ui_state.seeds);
+    if (!seed) jd_LogError("UI Error: Seed stack is empty!", jd_Error_APIMisuse, jd_Error_Fatal);
+    u32 hash = jd_HashU64toU32(v, *seed);
+    jd_DArrayPushBack(_jd_internal_ui_state.seeds, &hash);
+}
+
+void jd_UISeedPushStringF(jd_String fmt, ...) {
     jd_ScratchArena s = jd_ScratchArenaCreate(_jd_internal_ui_state.arena);
     va_list list = {0};
     va_start(list, fmt);
@@ -81,7 +88,7 @@ jd_ExportFn jd_ForceInline void jd_UISeedPushStringF(jd_String fmt, ...) {
     va_end(list);
 }
 
-jd_ExportFn jd_ForceInline void jd_UISeedPop() {
+void jd_UISeedPop() {
 #ifdef JD_DEBUG
     if (!_jd_internal_ui_state.seeds->count)
         jd_LogError("Seed stack is empty! Mismatched Push/Pop pair", jd_Error_APIMisuse, jd_Error_Fatal);
@@ -89,7 +96,7 @@ jd_ExportFn jd_ForceInline void jd_UISeedPop() {
     jd_DArrayPopBack(_jd_internal_ui_state.seeds);
 }
 
-jd_ExportFn jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
+jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
     jd_UIBoxRec* b = &(_jd_internal_ui_state.box_array[tag.key % _jd_internal_ui_state.box_array_size]);
     if (b->tag.key == 0) {
         b->tag.key = tag.key;
@@ -130,11 +137,11 @@ void jd_UIBoxPrune() {
 }
 
 
-jd_ExportFn void jd_UIMemoryCleanup() {
+void jd_UIMemoryCleanup() {
     jd_UIBoxPrune();
 };
 
-jd_ForceInline b32 jd_UIRectContainsPoint(jd_UIViewport* vp, jd_RectF32 r, jd_V2F p) {
+b32 jd_UIRectContainsPoint(jd_UIViewport* vp, jd_RectF32 r, jd_V2F p) {
     jd_V2F min = {r.min.x, r.min.y};
     jd_V2F max = {(r.min.x) + (r.max.x), (r.min.y) + (r.max.y)};
     return ((p.x > min.x && p.x < max.x) && (p.y > min.y && p.y < max.y));
@@ -258,6 +265,11 @@ void jd_UIStylePop() {
         jd_LogError("Mismatched calls to jd_UIStylePop()", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     jd_DArrayPopBack(_jd_internal_ui_state.style_stack);
+}
+
+jd_UIStyle* jd_UIStyleGet() {
+    if (_jd_internal_ui_state.style_stack->count == 0) return &jd_default_style_dark;
+    return jd_DArrayGetBack(_jd_internal_ui_state.style_stack);
 }
 
 jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
@@ -546,6 +558,7 @@ void jd_UI_Internal_SolveFitChildrenSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             }
             
             b->rect.max.val[axis] = size;
+            b->rect.max.val[axis] += (b->style.padding.val[axis] * 2);
         }
         
         b->requested_size.val[axis] = b->rect.max.val[axis];
@@ -652,8 +665,12 @@ void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
                     c->rect.min.val[axis] += b->style.padding.val[axis];
                 }
                 
-                if (axis == b->layout_axis)
+                if (axis == b->layout_axis) {
                     position += c->rect.max.val[axis] + b->layout_gap;
+                    if (c == b->first_child) {
+                        position += b->style.padding.val[axis];
+                    }
+                }
                 else {
                     position = jd_Max(position, b->style.padding.val[axis]);
                 }
@@ -760,6 +777,8 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         b->rect = jd_RectClip(b->rect, clipping_rectangle_parent);
         
         if (debug && b->font_id.count > 0) {
+#define jd_UIDebugStrings 1
+#if jd_UIDebugStrings
             jd_ScratchArena s = jd_ScratchArenaCreate(_jd_internal_ui_state.arena);
             jd_String formatted_string = jd_StringPushF(s.arena, 
                                                         jd_StrLit("RSize: X: %.2f Y: %.2f - FSize: X: %.2f Y: %.2f"),
@@ -767,12 +786,19 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
                                                         b->requested_size.y,
                                                         b->rect.x1,
                                                         b->rect.y1);
+#endif
             
-            jd_DrawRectWithZ(rect_pos, rect_size, (jd_V4F){1.0f, 0.0f, 0.0f, 1.0f}, 0.0f, 0.0f, 2.0f, clipping_rectangle_parent);
+            jd_V4F debug_color        = {1.0f, 0.0, 0.0, 0.5};
+            jd_V4F debug_color_active = {1.0f, 1.0, 0.0, 1.0};
+            jd_V4F c = (b == vp->last_active) ? debug_color_active : debug_color;
+            
+            jd_DrawRectWithZ(rect_pos, rect_size, c, 0.0f, 0.0f, 2.0f, clipping_rectangle_parent);
+            
+#if jd_UIDebugStrings
             jd_DrawStringWithZ(b->font_id, formatted_string, rect_pos, jd_TextOrigin_TopLeft, style.label_color, 0.0f, clipping_rectangle_parent);
-            
-            jd_DebugPrint(formatted_string);
             jd_ScratchArenaRelease(s);
+#endif
+            
         }
         
         jd_TreeTraversePreorder(b);
@@ -995,6 +1021,55 @@ jd_UIResult jd_UILabel(jd_String label) {
     return result;
 }
 
+jd_UIResult jd_UILabelSized(jd_String label, jd_UISize size, jd_V2F alignment, jd_UIBoxFlags flags) {
+    jd_UIBoxConfig config = {0};
+    config.flags = flags;
+    config.flags |= jd_UIBoxFlags_StaticColor;
+    config.string_id = _jd_UIStringGetHashPart(label);
+    config.label = _jd_UIStringGetDisplayPart(label);
+    config.size = size;
+    config.cursor = jd_Cursor_Default;
+    config.label_alignment = alignment;
+    
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    
+    return result;
+}
+
+jd_UIResult jd_UIFixedSizeLabel(jd_String label, jd_V2F alignment, jd_V2F size) {
+    jd_UIBoxConfig config = {0};
+    config.flags = jd_UIBoxFlags_StaticColor;
+    config.string_id = _jd_UIStringGetHashPart(label);
+    config.label = _jd_UIStringGetDisplayPart(label);
+    config.size.rule[jd_UIAxis_X] = jd_UISizeRule_Fixed;
+    config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_Fixed;
+    config.size.fixed_size = size;
+    config.cursor = jd_Cursor_Default;
+    config.label_alignment = alignment;
+    
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    
+    return result;
+}
+
+jd_UIResult jd_UILabelGrow(jd_String label, jd_V2F alignment) {
+    jd_UIBoxConfig config = {0};
+    config.flags = jd_UIBoxFlags_StaticColor;
+    config.string_id = _jd_UIStringGetHashPart(label);
+    config.label = _jd_UIStringGetDisplayPart(label);
+    config.size.rule[jd_UIAxis_X] = jd_UISizeRule_Grow;
+    config.size.rule[jd_UIAxis_Y] = jd_UISizeRule_Grow;
+    config.cursor = jd_Cursor_Default;
+    config.label_alignment = alignment;
+    
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    
+    return result;
+}
+
 jd_UIResult jd_UILabelButton(jd_String label) {
     jd_UIBoxConfig config = {0};
     config.flags = jd_UIBoxFlags_Clickable;
@@ -1155,6 +1230,20 @@ jd_UIResult jd_UIWindowRegionBegin(jd_V2F min_size, jd_UIStyle* style, jd_UILayo
     
     jd_UIResult result = jd_UIBoxBegin(&config);
     
+    return result;
+}
+
+jd_UIResult jd_UIFixedPadding(jd_String string_id, jd_V2F fixed_size) {
+    jd_UIBoxConfig config = {0};
+    config.string_id = string_id;
+    config.flags = 0;
+    config.size = (jd_UISize){jd_UISizeRule_Fixed, jd_UISizeRule_Fixed};
+    config.size.fixed_size = fixed_size;
+    config.flags |= jd_UIBoxFlags_StaticColor;
+    config.cursor = jd_Cursor_Default;
+    config.style = &jd_invisible_style;
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
     return result;
 }
 

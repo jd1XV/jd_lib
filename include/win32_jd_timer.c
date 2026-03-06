@@ -15,3 +15,7 @@ jd_ExportFn jd_ForceInline jd_Timer jd_TimerStop(jd_Timer watch) {
     watch.stop = ((f64)diff / (jd_SysInfoGetPerformanceFrequency() / 1000.0f));
     return watch;
 }
+
+jd_ExportFn jd_ForceInline void jd_Sleep(u32 ms) {
+    Sleep(ms);
+}
