@@ -122,10 +122,16 @@ typedef struct jd_DataFilter {
     jd_Node(jd_DataFilter);
 } jd_DataFilter;
 
-jd_ExportFn jd_DataFilter* jd_DataFilterCreate(jd_Arena* arena, jd_String key);
-jd_ExportFn jd_DataFilter* jd_DataFilterPush(jd_Arena* arena, jd_DataFilter* parent, jd_String key, jd_Value value, jd_DataFilterRule rule);
-jd_ExportFn jd_DataFilter* jd_DataFilterPushOr(jd_Arena* arena, jd_DataFilter* filter, jd_String key, jd_Value value, jd_DataFilterRule rule);
-jd_ExportFn b32            jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* filter, jd_DataNode* n, b32 case_sensitive);
+typedef struct jd_DataNodeList {
+    jd_DataNode** nodes;
+    u64 count;
+} jd_DataNodeList;
+
+jd_ExportFn jd_DataFilter*  jd_DataFilterCreate(jd_Arena* arena, jd_String key);
+jd_ExportFn jd_DataFilter*  jd_DataFilterPush(jd_Arena* arena, jd_DataFilter* parent, jd_String key, jd_Value value, jd_DataFilterRule rule);
+jd_ExportFn jd_DataFilter*  jd_DataFilterPushOr(jd_Arena* arena, jd_DataFilter* filter, jd_String key, jd_Value value, jd_DataFilterRule rule);
+jd_ExportFn b32             jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* filter, jd_DataNode* n, b32 case_sensitive);
+jd_ExportFn jd_DataNodeList jd_DataFilterEvaluateGeneration(jd_Arena* arena, u64 max_results, jd_DataFilter* filter, jd_DataNode* node, b32 case_sensitive);
 
 jd_ExportFn void           jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on_key, jd_DataPointSortRule rule);
 

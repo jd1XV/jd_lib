@@ -769,7 +769,7 @@ jd_DataFilter* jd_DataFilterPushOr(jd_Arena* arena, jd_DataFilter* filter, jd_St
 
 */
 
-b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sensitive, jd_DArray* used_nodes) {
+b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sensitive, jd_DataNode** used_nodes, u64 used_nodes_count) {
     b32 eval = 0;
     switch (n->value.type) {
         case jd_DataType_None:
@@ -1100,9 +1100,8 @@ b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sen
         }
     }
     
-    for (u64 i = 0; i < used_nodes->count; i++) {
-        u64* used_ptr = jd_DArrayGetIndex(used_nodes, i);
-        jd_DataNode* used = jd_ReadPtrAtAddr(used_ptr);
+    for (u64 i = 0; i < used_nodes_count; i++) {
+        jd_DataNode* used = used_nodes[i];
         
         if (n == used) {
             eval = false;
@@ -1111,14 +1110,15 @@ b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sen
     return eval;
 }
 
-b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, b32 case_sensitive) {
-    typedef struct KeyPair {
-        jd_DataFilter* p;
-        jd_DataFilter* f;
-    } KeyPair;
-    
-    jd_DArray* keypairs = jd_DArrayCreate(1024, sizeof(KeyPair));
-    jd_DArray* used_nodes = jd_DArrayCreate(1024, sizeof(jd_DataNode*));
+typedef struct jd_DataFilterKP {
+    jd_DataFilter* p;
+    jd_DataFilter* f;
+    b32 found;
+} jd_DataFilterKP;
+
+b32 jd_DataFilterEvaluatePassedArrays(jd_DataFilter* f, jd_DataNode* node, b32 case_sensitive, jd_DataFilterKP* keypairs, jd_DataNode** used_nodes) {
+    u64 keypair_index = 0;
+    u64 used_nodes_index = 0;
     
     jd_DataNode* n = node;
     
@@ -1127,18 +1127,20 @@ b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, 
     jd_TreeTraversePreorder(n);
     
     while (f != 0) {
-        KeyPair kp = {0};
-        kp.p = f->parent;
-        kp.f = f;
-        
-        jd_DArrayPushBack(keypairs, &kp);
+        jd_DataFilterKP* kp = &keypairs[keypair_index];
+        kp->p = f->parent;
+        kp->f = f;
+        keypair_index++;
         
         jd_TreeTraversePreorder(f);
     }
     
     while (n != 0 && n != node->next) {
-        for (u64 i = 0; i < keypairs->count; i++) {
-            KeyPair* kp = jd_DArrayGetIndex(keypairs, i);
+        for (u64 i = 0; i < keypair_index; i++) {
+            jd_DataFilterKP* kp = &keypairs[i];
+            if (kp->found) {
+                continue;
+            }
             jd_DataFilter* f = kp->f;
             b32 eval = false;
             while (f) {
@@ -1146,10 +1148,11 @@ b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, 
                 b32 parent_match = (jd_StringMatch(kp->p->key, n->parent->key) && kp->p->value.type == n->parent->value.type);
                 b32 child_match =  (jd_StringMatch(kp->f->key, n->key) && kp->f->value.type == n->value.type);
                 if (parent_match && child_match) {
-                    eval = jd_Internal_DataFilterCompare(f, n, case_sensitive, used_nodes);
+                    eval = jd_Internal_DataFilterCompare(f, n, case_sensitive, used_nodes, used_nodes_index);
                     if (eval) {
-                        jd_DArrayPopIndex(keypairs, i);
-                        jd_DArrayPushBack(used_nodes, n);
+                        kp->found = true;
+                        used_nodes[used_nodes_index] = n;
+                        used_nodes_index++;
                         break;
                     }
                     
@@ -1163,10 +1166,52 @@ b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, 
         jd_TreeTraversePreorder(n);
     }
     
-    b32 ret = (keypairs->count == 0);
-    jd_DArrayRelease(keypairs);
-    jd_DArrayRelease(used_nodes);
+    u64 keypairs_found = 0;
+    for (u64 i = 0; i < keypair_index; i++) {
+        if (keypairs[i].found) keypairs_found++;
+    }
+    
+    b32 ret = (keypairs_found == keypair_index);
+    
     return ret;
+}
+
+b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, b32 case_sensitive) {
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+    
+    jd_DataFilterKP* keypairs = jd_ArenaAlloc(s.arena, sizeof(jd_DataFilterKP) * 1024);
+    jd_DataNode** used_nodes = jd_ArenaAlloc(s.arena, sizeof(jd_DataNode*) * 1024);
+    b32 eval = jd_DataFilterEvaluatePassedArrays(f, node, case_sensitive, keypairs, used_nodes);
+    jd_ScratchArenaRelease(s);
+    return eval;
+}
+
+jd_DataNodeList jd_DataFilterEvaluateGeneration(jd_Arena* arena, u64 max_results, jd_DataFilter* filter, jd_DataNode* node, b32 case_sensitive) {
+    jd_DataNodeList list = {
+        .nodes = jd_ArenaAlloc(arena, sizeof(jd_DataNode*) * max_results)
+    };
+    
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+    
+    jd_DataFilterKP* keypairs = jd_ArenaAlloc(s.arena, sizeof(jd_DataFilterKP) * max_results);
+    jd_DataNode** used_nodes  = jd_ArenaAlloc(s.arena, sizeof(jd_DataNode*) * max_results);
+    
+    jd_DataNode* n = node;
+    while (n != 0) {
+        b32 eval = jd_DataFilterEvaluatePassedArrays(filter, n, case_sensitive, keypairs, used_nodes);
+        if (eval) {
+            list.nodes[list.count] = n;
+            list.count++;
+        }
+        
+        jd_ZeroMemory(keypairs, max_results);
+        jd_ZeroMemory(used_nodes, max_results);
+        
+        n = n->next;
+    }
+    
+    jd_ScratchArenaRelease(s);
+    return list;
 }
 
 

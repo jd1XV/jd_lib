@@ -234,6 +234,7 @@ jd_ExportFn jd_ForceInline void jd_UIFontPop();
 jd_ExportFn jd_ForceInline jd_UIViewport* jd_UIViewportGetCurrent();
 jd_ExportFn jd_ForceInline jd_V2F         jd_UIParentSize(jd_UIBoxRec* box);
 jd_ExportFn jd_ForceInline jd_UIBoxRec*   jd_UIGetLastBox();
+jd_ExportFn jd_ForceInline void           jd_UIResetScroll(jd_UIBoxRec* b);
 
 jd_ExportFn jd_UIResult jd_UIButton(jd_String label, jd_UISize size, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UILabel(jd_String label);

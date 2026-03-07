@@ -657,19 +657,15 @@ void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
             }
             else if (c->fixed_position.val[axis] == 0) {
                 c->rect.min.val[axis] = (b->rect.min.val[axis] + position);
-                if (c != b->first_child) {
-                    if (axis == b->layout_axis) {
-                        c->rect.min.val[axis] += b->layout_gap;
-                    }
-                } else {
+                if (c == b->first_child) {
                     c->rect.min.val[axis] += b->style.padding.val[axis];
                 }
                 
                 if (axis == b->layout_axis) {
-                    position += c->rect.max.val[axis] + b->layout_gap;
                     if (c == b->first_child) {
                         position += b->style.padding.val[axis];
-                    }
+                    } 
+                    position += c->rect.max.val[axis] + b->layout_gap;
                 }
                 else {
                     position = jd_Max(position, b->style.padding.val[axis]);
@@ -762,8 +758,11 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
             jd_V2F string_pos = {rect_pos.x, rect_pos.y};
             
             for (u32 i = 0; i < jd_UIAxis_Count; i++) {
-                if (b->size.rule[i] == jd_UISizeRule_FitText)
+                if (b->size.rule[i] == jd_UISizeRule_FitText) {
                     string_pos.val[i] += b->style.label_padding.val[i] / 2.0f;
+                    string_pos.val[i] += b->style.padding.val[i];
+                }
+                
             }
             
             jd_V2F string_size = jd_CalcStringSizeUTF8(b->font_id, b->label, rect_size.x);
@@ -1263,6 +1262,12 @@ jd_UIResult jd_UIGrowPadding(jd_String string_id) {
 jd_UIBoxRec* jd_UIGetLastBox() {
     jd_UIViewport* vp = jd_UIViewportGetCurrent();
     return vp->builder_last_box;
+}
+void jd_UIResetScroll(jd_UIBoxRec* b) {
+    b->scroll_max.x = 0;
+    b->scroll_max.y = 0;
+    b->scroll.x = 0;
+    b->scroll.y = 0;
 }
 
 void jd_UIRegionEnd() {
