@@ -61,8 +61,6 @@ typedef struct jd_2DTexture {
     u32    used_slots;
     b32    bound;
     
-    jd_DArray* vertices;
-    
     jd_Node(jd_2DTexture);
 } jd_2DTexture;
 

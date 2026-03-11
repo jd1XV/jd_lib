@@ -16,6 +16,7 @@ jd_DataBank* jd_DataBankCreate(jd_DataBankConfig* config) {
     db->root->bank = db;
     db->root->value.type = jd_DataType_Root;
     db->root->value.U64 = -1;
+    db->arena_refresh_pos = arena->pos;
     return db;
 }
 
@@ -53,8 +54,8 @@ u64 jd_DataBankGetHashTableSlot(jd_DataBank* bank, u64 primary_key) {
 }
 
 jd_DataNode* jd_DataBankGetRecordWithID(jd_DataBank* bank, u64 primary_key) {
-    jd_RWLockGet(bank->lock, jd_RWLock_Read);
     u64 slot = jd_DataBankGetHashTableSlot(bank, primary_key);
+    jd_RWLockGet(bank->lock, jd_RWLock_Read);
     jd_DataNode* n = &bank->primary_key_hash_table[slot];
     while (n != 0) {
         if (n->value.type == jd_DataType_Record && n->value.U64 == primary_key) {
@@ -66,6 +67,19 @@ jd_DataNode* jd_DataBankGetRecordWithID(jd_DataBank* bank, u64 primary_key) {
     jd_RWLockRelease(bank->lock, jd_RWLock_Read);
     
     return n;
+}
+
+void jd_DataBankDeleteRecordByID(jd_DataBank* bank, u64 primary_key) {
+    jd_DataNode* record = jd_DataBankGetRecordWithID(bank, primary_key);
+    jd_RWLockGet(bank->lock, jd_RWLock_Write);
+    jd_TreeLinksPop(record);
+    jd_RWLockRelease(bank->lock, jd_RWLock_Write);
+}
+
+void jd_DataBankDeleteRecord(jd_DataNode* record) {
+    jd_RWLockGet(record->bank->lock, jd_RWLock_Write);
+    jd_TreeLinksPop(record);
+    jd_RWLockRelease(record->bank->lock, jd_RWLock_Write);
 }
 
 jd_DataNode* jd_DataBankAddRecordWithPK(jd_DataNode* parent, jd_String key, u64 primary_key) {
@@ -80,8 +94,8 @@ jd_DataNode* jd_DataBankAddRecordWithPK(jd_DataNode* parent, jd_String key, u64 
     }
     
     jd_RWLockGet(db->lock, jd_RWLock_Write);
-    
     u32 slot = jd_DataBankGetHashTableSlot(db, primary_key);
+    
     jd_DataNode* n = &db->primary_key_hash_table[slot];
     if (n->value.type != jd_DataType_None) {
         while (n->next_with_same_hash != 0) {
@@ -92,7 +106,7 @@ jd_DataNode* jd_DataBankAddRecordWithPK(jd_DataNode* parent, jd_String key, u64 
         n = n->next_with_same_hash;
     }
     
-    n->lock = jd_RWLockCreate(db->arena);
+    //n->lock = jd_RWLockCreate(db->arena);
     n->key = jd_StringPush(db->arena, key);
     n->value.U64 = primary_key;
     n->value.type = jd_DataType_Record;
@@ -132,7 +146,7 @@ jd_DataNode* jd_DataPointGet(jd_DataNode* record, jd_String key) {
     
     jd_DataNode* out = 0;
     
-    jd_RWLockGet(record->lock, jd_RWLock_Read);
+    jd_RWLockGet(record->bank->lock, jd_RWLock_Read);
     
     jd_DataNode* n = record->first_child;
     jd_ForDLLForward(n, n != 0) {
@@ -142,7 +156,7 @@ jd_DataNode* jd_DataPointGet(jd_DataNode* record, jd_String key) {
         }
     }
     
-    jd_RWLockRelease(record->lock, jd_RWLock_Read);
+    jd_RWLockRelease(record->bank->lock, jd_RWLock_Read);
     
     return out;
 }
@@ -176,9 +190,10 @@ jd_DataNode* jd_DataPointSet(jd_DataNode* record, jd_String key, jd_Value value)
     }
     
     jd_DataNode* n = jd_DataPointGet(record, key);
-    jd_RWLockGet(record->lock, jd_RWLock_Write);
     
     b32 exists = (n != 0);
+    
+    jd_RWLockGet(record->bank->lock, jd_RWLock_Write);
     
     if (!exists) {
         n = jd_ArenaAlloc(bank->arena, sizeof(*n));
@@ -215,7 +230,7 @@ jd_DataNode* jd_DataPointSet(jd_DataNode* record, jd_String key, jd_Value value)
     if (!exists)
         jd_TreeLinkLastChild(record, n);
     
-    jd_RWLockRelease(record->lock, jd_RWLock_Write);
+    jd_RWLockRelease(record->bank->lock, jd_RWLock_Write);
     
     return n;
 }
@@ -223,11 +238,14 @@ jd_DataNode* jd_DataPointSet(jd_DataNode* record, jd_String key, jd_Value value)
 jd_DataNode* jd_DataBankGetRecord(jd_DataNode* start, jd_String key) {
     jd_DataNode* n = start;
     if (!n) return n;
+    //jd_RWLockGet(start->bank->lock, jd_RWLock_Read);
     jd_TreeTraversePreorder(n);
+    //jd_RWLockRelease(start->bank->lock, jd_RWLock_Read);
     if (!n) return n;
-    
+    jd_RWLockGet(start->bank->lock, jd_RWLock_Read);
     while (n) {
         if (jd_StringMatch(n->key, key)) {
+            jd_RWLockRelease(start->bank->lock, jd_RWLock_Read);
             return n;
         }
         
@@ -236,7 +254,7 @@ jd_DataNode* jd_DataBankGetRecord(jd_DataNode* start, jd_String key) {
             jd_TreeTraversePreorder(n);
         }
     }
-    
+    jd_RWLockRelease(start->bank->lock, jd_RWLock_Read);
     return n;
 }
 
@@ -251,7 +269,7 @@ jd_Value jd_DataPointGetValue(jd_DataNode* record, jd_String key) {
     
     jd_Value v = {0};
     
-    jd_RWLockGet(record->lock, jd_RWLock_Read);
+    jd_RWLockGet(record->bank->lock, jd_RWLock_Read);
     
     jd_DataNode* n = record->first_child;
     jd_ForDLLForward(n, n != 0) {
@@ -261,7 +279,7 @@ jd_Value jd_DataPointGetValue(jd_DataNode* record, jd_String key) {
         }
     }
     
-    jd_RWLockRelease(record->lock, jd_RWLock_Read);
+    jd_RWLockRelease(record->bank->lock, jd_RWLock_Read);
     
     return v;
 }
@@ -665,6 +683,7 @@ jd_DFile* jd_DataBankSerialize(jd_DataBank* bank) {
             case jd_DataType_None:
             case jd_DataType_Root: {
                 jd_LogError("DataNode is untyped or a misplaced root!", jd_Error_APIMisuse, jd_Error_Fatal);
+                jd_RWLockRelease(bank->lock, jd_RWLock_Read);
                 jd_DFileRelease(out);
                 return 0;
             }
@@ -792,14 +811,10 @@ b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sen
                 }
                 
                 case jd_FilterRule_Contains: {
-                    
-#if 0                                
                     if (case_sensitive)
-                        eval = (jd_StrContainsSubstr(n->value.string, f->value.string));
+                        eval = (jd_StringContainsSubstring(n->value.string, f->value.string));
                     else
-                        eval = (jd_StrContainsSubstrCaseInsensitive(n->value.string, f->value.string));
-#endif
-                    
+                        eval = (jd_StringContainsSubstringCaseInsensitive(n->value.string, f->value.string));
                     break;
                 }
                 
@@ -810,13 +825,10 @@ b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sen
                 
                 case jd_FilterRule_DoesNotContain: {
                     
-#if 0                                
                     if (case_sensitive)
-                        eval = !(jd_StrContainsSubstr(n->value.string, f->value.string));
+                        eval = !(jd_StringContainsSubstring(n->value.string, f->value.string));
                     else
-                        eval = !(jd_StrContainsSubstrCaseInsensitive(n->value.string, f->value.string));
-#endif
-                    
+                        eval = !(jd_StringContainsSubstringCaseInsensitive(n->value.string, f->value.string));
                     break;
                 }
             }
@@ -1146,7 +1158,11 @@ b32 jd_DataFilterEvaluatePassedArrays(jd_DataFilter* f, jd_DataNode* node, b32 c
             while (f) {
                 if (!n->parent) continue;
                 b32 parent_match = (jd_StringMatch(kp->p->key, n->parent->key) && kp->p->value.type == n->parent->value.type);
-                b32 child_match =  (jd_StringMatch(kp->f->key, n->key) && kp->f->value.type == n->value.type);
+                b32 child_match =  (jd_StringMatch(f->key, n->key) && f->value.type == n->value.type);
+                if (jd_StringMatch(n->key, jd_StrLit("feed_title"))
+                    && jd_StringMatch(n->value.string, jd_StrLit("Blowback Podcast: Season 6 | Premium edition"))) {
+                    int x = 0;
+                }
                 if (parent_match && child_match) {
                     eval = jd_Internal_DataFilterCompare(f, n, case_sensitive, used_nodes, used_nodes_index);
                     if (eval) {
@@ -1187,30 +1203,34 @@ b32 jd_DataFilterEvaluate(jd_Arena* arena, jd_DataFilter* f, jd_DataNode* node, 
 }
 
 jd_DataNodeList jd_DataFilterEvaluateGeneration(jd_Arena* arena, u64 max_results, jd_DataFilter* filter, jd_DataNode* node, b32 case_sensitive) {
-    jd_DataNodeList list = {
-        .nodes = jd_ArenaAlloc(arena, sizeof(jd_DataNode*) * max_results)
-    };
+    jd_DataNodeList list = {0};
+    if (!node) return list;
     
-    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
-    
-    jd_DataFilterKP* keypairs = jd_ArenaAlloc(s.arena, sizeof(jd_DataFilterKP) * max_results);
-    jd_DataNode** used_nodes  = jd_ArenaAlloc(s.arena, sizeof(jd_DataNode*) * max_results);
-    
-    jd_DataNode* n = node;
-    while (n != 0) {
-        b32 eval = jd_DataFilterEvaluatePassedArrays(filter, n, case_sensitive, keypairs, used_nodes);
-        if (eval) {
-            list.nodes[list.count] = n;
-            list.count++;
+    if (node && jd_RWLockTryGet(node->bank->lock, jd_RWLock_Read)) {
+        list.nodes = jd_ArenaAlloc(arena, sizeof(jd_DataNode*) * max_results);
+        jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+        
+        jd_DataFilterKP* keypairs = jd_ArenaAlloc(s.arena, sizeof(jd_DataFilterKP) * max_results);
+        jd_DataNode** used_nodes  = jd_ArenaAlloc(s.arena, sizeof(jd_DataNode*) * max_results);
+        
+        jd_DataNode* n = node;
+        while (n != 0) {
+            b32 eval = jd_DataFilterEvaluatePassedArrays(filter, n, case_sensitive, keypairs, used_nodes);
+            if (eval) {
+                list.nodes[list.count] = n;
+                list.count++;
+            }
+            
+            jd_ZeroMemory(keypairs, max_results);
+            jd_ZeroMemory(used_nodes, max_results);
+            
+            n = n->next;
         }
         
-        jd_ZeroMemory(keypairs, max_results);
-        jd_ZeroMemory(used_nodes, max_results);
-        
-        n = n->next;
+        jd_ScratchArenaRelease(s);
+        jd_RWLockRelease(node->bank->lock, jd_RWLock_Read);
     }
     
-    jd_ScratchArenaRelease(s);
     return list;
 }
 
@@ -1361,7 +1381,7 @@ void jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on
         jd_LogError("Invalid node provided.", jd_Error_APIMisuse, jd_Error_Critical);
     }
     
-    jd_RWLockGet(p->lock, jd_RWLock_Write);
+    jd_RWLockGet(p->bank->lock, jd_RWLock_Write);
     
     jd_DArray* sort_array = jd_DArrayCreate(2048, sizeof(jd_DataNode*));
     jd_DArray* others     = jd_DArrayCreate(2048, sizeof(jd_DataNode*));
@@ -1382,6 +1402,8 @@ void jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on
         n = n->next;
     }
     
+    jd_RWLockRelease(p->bank->lock, jd_RWLock_Write);
+    
     switch (rule) {
         case jd_SortRule_Ascending: {
             qsort_s(sort_array->view.mem, sort_array->count, sizeof(jd_DataNode*), jd_DataBank_Internal_QSortAsc, &sort_on_key);
@@ -1394,6 +1416,7 @@ void jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on
         }
     }
     
+    jd_RWLockGet(p->bank->lock, jd_RWLock_Write);
     p->first_child = 0;
     p->last_child  = 0;
     
@@ -1412,5 +1435,5 @@ void jd_DataBankSortRecordGeneration(jd_DataNode* first_child, jd_String sort_on
     jd_DArrayRelease(sort_array);
     jd_DArrayRelease(others);
     
-    jd_RWLockRelease(p->lock, jd_RWLock_Write);
+    jd_RWLockRelease(p->bank->lock, jd_RWLock_Write);
 }

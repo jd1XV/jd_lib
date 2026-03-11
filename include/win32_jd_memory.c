@@ -2,7 +2,7 @@ void jd_ZeroMemory(void* dest, u64 size) {
     ZeroMemory(dest, size);
 }
 
-void jd_MemCpy(void* dest, const void* src, u64 size) {
+void jd_MemCopy(void* dest, const void* src, u64 size) {
     CopyMemory(dest, src, size);
 }
 
@@ -155,7 +155,7 @@ void jd_MemSet(void* dest, const u8 val, u64 size) {
     }
 }
 
-b32 jd_MemCmp(void* a_, void* b_, u64 size) {
+b32 jd_MemCompare(void* a_, void* b_, u64 size) {
     jd_CPUFlags flags = jd_SysInfoGetCPUFlags();
     u64 index = 0;
     

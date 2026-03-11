@@ -365,9 +365,9 @@ void jd_AppLoadSystemFont(jd_Arena* arena) {
     jd_File segoe_ui = jd_DiskFileReadFromPath(s.arena, jd_StrLit("C:\\Windows\\Fonts\\segoeui.ttf"), false);
     jd_File icons    = jd_DiskFileReadFromPath(s.arena, jd_StrLit("assets/jd_font_custom.ttf"), false);
     
-    jd_FontCreateEmpty(jd_StrLit("OS_BaseFontWindows"), MEGABYTES(32), 16);
-    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFontWindows"), segoe_ui, &jd_unicode_range_bmp, 11, 192);
-    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFontWindows"), icons, &jd_unicode_range_all, 11, 192);
+    jd_FontCreateEmpty(jd_StrLit("OS_BaseFont"), MEGABYTES(32), 16);
+    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), segoe_ui, &jd_unicode_range_bmp, 11, 192);
+    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), icons, &jd_unicode_range_all, 11, 192);
     
     jd_ScratchArenaRelease(s);
 }
@@ -616,7 +616,7 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     }
     
     wglMakeCurrent(window->device_context, config->app->ogl_context);
-    wglSwapIntervalEXT(0);
+    wglSwapIntervalEXT(1);
     ShowWindow(window->handle, SW_SHOW);
     
     if (!config->app->renderer_initialized) {

@@ -29,8 +29,8 @@ jd_ExportFn jd_String jd_StringGetPostfix(jd_String str, jd_String pattern);
 
 jd_ExportFn b32 jd_StringMatch(jd_String a, jd_String b);
 jd_ExportFn b32 jd_StringContainsSubstring(jd_String string, jd_String substring);
+jd_ExportFn b32 jd_StringContainsSubstringCaseInsensitive(jd_String string, jd_String substring);
 jd_ExportFn b32 jd_StringBeginsWith(jd_String string, jd_String substring);
-
 #define jd_DStringGet(x) (jd_String){x->mem, x->count}
 
 jd_ExportFn jd_DString* jd_DStringCreate(u64 capacity);

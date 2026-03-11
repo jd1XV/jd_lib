@@ -231,7 +231,7 @@ typedef struct jd_DFile {
     jd_View   view;
 } jd_DFile;
 
-#define jd_DFileGet(x) file->view
+#define jd_DFileGet(x) x->view
 
 jd_ExportFn jd_DFile* jd_DFileCreate(u64 max_size);
 jd_ExportFn void      jd_DFileAppendSized(jd_DFile* df, u64 size, void* ptr);

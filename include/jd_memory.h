@@ -35,10 +35,10 @@ jd_ExportFn jd_ScratchArena jd_ScratchArenaCreate(jd_Arena* arena);
 jd_ExportFn void            jd_ScratchArenaRelease(jd_ScratchArena scratch);
 
 jd_ExportFn void jd_ZeroMemory(void* dest, u64 size);
-jd_ExportFn void jd_MemCpy(void* dest, const void* src, u64 size);
+jd_ExportFn void jd_MemCopy(void* dest, const void* src, u64 size);
 jd_ExportFn void jd_MemMove(void* dest, const void* src, u64 count);
 jd_ExportFn void jd_MemSet(void* dest, u8 val, u64 size);
-jd_ExportFn b32  jd_MemCmp(void* a, void* b, u64 size);
+jd_ExportFn b32  jd_MemCompare(void* a, void* b, u64 size);
 
 #ifdef JD_IMPLEMENTATION
 

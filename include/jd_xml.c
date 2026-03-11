@@ -141,7 +141,7 @@ jd_String jd_XMLStringPushEscaped(jd_Arena* arena, jd_String str) {
         u64 match_char = 0;
         for (u64 j = 0; j < escape_sequences_count; j++) {
             if (i + escape_sequences[j].count <= str.count) {
-                if (jd_MemCmp(escape_sequences[j].mem, &str.mem[i], escape_sequences[j].count)) {
+                if (jd_MemCompare(escape_sequences[j].mem, &str.mem[i], escape_sequences[j].count)) {
                     match_char = j;
                     i += escape_sequences[j].count - 1;
                     break;
@@ -235,6 +235,12 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
             jd_XMLParserSeekChars(parser, jd_StrLit("?"), true);
             jd_XMLParserSeekChars(parser, jd_StrLit(">"), true);
             parser->index++;
+        }
+        
+        if (root->decl && jd_StringMatch(parser->token, jd_StrLit("?xml"))) {
+            // skip stylesheet info for now
+            parser->index++;
+            continue;
         }
         
         else if (jd_StringBeginsWith(parser->token, jd_StrLit("/"))) {

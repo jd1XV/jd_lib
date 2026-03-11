@@ -31,7 +31,7 @@ jd_ForceInline void* jd_DArrayPushBack(jd_DArray* d_array, void* data) {
     }
     
     if (data) {
-        jd_MemCpy(ptr, data, d_array->stride);
+        jd_MemCopy(ptr, data, d_array->stride);
     }
     
     d_array->count++;
@@ -47,7 +47,7 @@ jd_ForceInline void* jd_DArrayPushBackV(jd_DArray* d_array, u64 count, void* dat
     }
     
     if (data) {
-        jd_MemCpy(ptr, data, (d_array->stride * count));
+        jd_MemCopy(ptr, data, (d_array->stride * count));
     }
     
     d_array->count += count;
@@ -62,7 +62,7 @@ jd_ForceInline void* jd_DArrayPushAtIndex(jd_DArray* d_array, u64 index, void* d
     u8* insert = jd_DArrayGetIndex(d_array, index);
     u8* next = insert + d_array->stride;
     jd_MemMove(next, insert, space_in_front);
-    if (data) jd_MemCpy(insert, data, d_array->stride);
+    if (data) jd_MemCopy(insert, data, d_array->stride);
     d_array->count++;
     d_array->view.size += d_array->stride;
     return insert;
@@ -74,7 +74,7 @@ jd_ForceInline void* jd_DArrayPushAtIndexV(jd_DArray* d_array, u64 index, u64 co
     u8* insert = jd_DArrayGetIndex(d_array, index);
     u8* next = insert + (d_array->stride * count);
     jd_MemMove(next, insert, space_in_front);
-    if (data) jd_MemCpy(insert, data, (d_array->stride * count));
+    if (data) jd_MemCopy(insert, data, (d_array->stride * count));
     d_array->count += count;
     d_array->view.size += (d_array->stride) * count;
     return insert;
@@ -149,7 +149,7 @@ jd_DFile* jd_DFileCreate(u64 max_size) {
 
 void jd_DFileAppendSized(jd_DFile* df, u64 size, void* ptr) {
     u8* dst = jd_ArenaAlloc(df->arena, size);
-    jd_MemCpy(dst, ptr, size);
+    jd_MemCopy(dst, ptr, size);
     df->view.size += size;
 }
 

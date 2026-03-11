@@ -64,7 +64,10 @@ jd_String fs_string = jd_StrConst("#version 460\n"
                                   "    vec4 color = texture(tex, fs_uvw);\n"
                                   "    \n"
                                   "    float softness = fs_softness;\n"
-                                  "    vec2 softness_padding = vec2(max(0, softness * 2 - 1), max(0, softness * 2 - 1));\n"
+                                  "    if (fs_rounding != 0) {\n"
+                                  "        softness = 1.0f;\n"
+                                  "    }\n"
+                                  "    vec2 softness_padding = vec2(max(0, (softness * 2)), max(0, (softness * 2)));\n"
                                   "    \n"
                                   "    vec2 p0 = vec2(fs_rect.x, fs_rect.z);\n"
                                   "    vec2 p1 = vec2(fs_rect.y, fs_rect.w);\n"
@@ -76,16 +79,15 @@ jd_String fs_string = jd_StrConst("#version 460\n"
                                   "    \n"
                                   "    float border_factor = 1.0f;\n"
                                   "    \n"
-                                  "    if (fs_thickness != 0) {\n"
-                                  "        vec2 interior_half_size = rect_half_size - vec2(fs_thickness);\n"
+                                  "    if (fs_thickness > 0) {\n"
+                                  "        vec2 interior_half_size = rect_half_size - vec2(fs_softness * 2.f, fs_softness * 2.f) - vec2(fs_thickness);\n"
                                   "        \n"
                                   "        float interior_radius_reduce = min(interior_half_size.x / rect_half_size.x,\n"
                                   "                                           interior_half_size.y / rect_half_size.y);\n"
                                   "        float interior_corner_radius = (fs_rounding * interior_radius_reduce * interior_radius_reduce);\n"
                                   "        \n"
-                                  "        float inside_d = RoundingSDF(fs_xyz.xy, rect_center, interior_half_size - softness_padding, interior_corner_radius);\n"
+                                  "        float inside_d = RoundingSDF(fs_xyz.xy, rect_center, interior_half_size - softness_padding - fs_thickness, interior_corner_radius);\n"
                                   "        \n"
-                                  "        // map distance => factor\n"
                                   "        float inside_f = smoothstep(0, 2 * softness, inside_d);\n"
                                   "        border_factor = inside_f;\n"
                                   "    }\n"
@@ -352,6 +354,14 @@ jd_Font* jd_FontGetByID(jd_String font_id) {
     return font;
 }
 
+//-
+/*TODO: RGBA Textures: 
+
+
+
+*/
+//-
+
 void jd_FontAddTypefaceFromMemory(jd_String font_id, jd_File file, jd_TypefaceUnicodeRange* range, i32 point_size, f32 dpi) {
     jd_Font* font = jd_FontGetByID(font_id);
     if (!font) {
@@ -488,16 +498,6 @@ jd_ForceInline void jd_TextureQueue2(jd_2DTexture* texture) {
 
 jd_ForceInline void jd_TextureQueue(jd_2DTexture* texture) {
     jd_TextureQueue2(texture);
-#if 0
-    if (texture->bound) return;
-    jd_Renderer* renderer = jd_RendererGet();
-    if (!renderer->render_chain) 
-        renderer->render_chain = texture;
-    else
-        jd_DLinkNext(renderer->render_chain, texture);
-    
-    texture->bound = true;
-#endif
 }
 
 jd_RectF32 jd_RectClip(jd_RectF32 rect, jd_RectF32 clip) {
@@ -533,19 +533,6 @@ b32 jd_Internal_DrawGlyph(jd_Font* font, jd_V3F window_pos, jd_V4F col, jd_Glyph
     f32 clip_from_right = rect.max.x - clip_rectangle.max.x;
     f32 clip_from_top  = clip_rectangle.min.y - rect.min.y;
     f32 clip_from_bottom = rect.max.y - clip_rectangle.max.y;
-    
-    /*
-Let's imagine:
-
-Clip from left: 0.0f
-Clip from right: 0.0f
-Clip from top: 10.f
-Clip from bottom: 0.0f
-
-g->size = 100
-dpi_scale = 1.0
-
-*/
     
     clip_from_left = (clip_from_left > 0.0f) ? clip_from_left : 0.0f;
     clip_from_right = (clip_from_right > 0.0f) ? clip_from_right : 0.0f;
@@ -627,8 +614,6 @@ dpi_scale = 1.0
     
     return true;
 }
-
-
 
 jd_V2F jd_CalcStringBoxMax(jd_String font_id, jd_V2F starting_pos, jd_UTFDecodedString utf32_string, f32 wrap_width) {
     jd_Renderer* renderer = jd_RendererGet();
@@ -722,7 +707,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
     
     f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     
-    f32 line_adv = font->faces[0].line_adv;
+    f32 line_adv = fallback->face->line_adv;
     
     jd_V2F pos = jd_V2F(0.0, 0.0);
     jd_V2F size = jd_V2F(0.0, 0.0);
@@ -751,7 +736,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
             }
             
             size.x += g->h_advance * dpi_scaling;
-            size.y = (g->face->ascent + g->face->descent) * dpi_scaling;
+            size.y = jd_Max(size.y, (g->face->ascent + g->face->descent) * dpi_scaling);
         }
     }  else {
         for (u64 i = 0; i < utf32_string.count; i++) {
@@ -1078,7 +1063,7 @@ void jd_DrawStringUTF32(jd_String font_id, jd_UTFDecodedString utf32_string, jd_
         if (wrap) {
             if ((pos.x - starting_pos.x) + (adv * dpi_scaling) > wrap_width) {
                 pos.x = starting_pos.x;
-                pos.y += font->faces[0].line_adv * dpi_scaling;
+                pos.y += glyph->face->line_adv * dpi_scaling;
                 //pos.y += glyph->face->descent * dpi_scaling;
             }
             
@@ -1102,35 +1087,6 @@ void jd_DrawStringWithZ(jd_String font_id, jd_String str, jd_V3F window_pos, jd_
     jd_DrawStringUTF32(font_id, utf32_string, window_pos, baseline, color, wrap_width, clip_rect);
 }
 
-#if 0
-void jd_DrawStringWithBG(jd_String font_id, jd_String str, jd_V2F window_pos, jd_TextOrigin baseline, jd_V4F text_color, jd_V4F bg_color, f32 wrap_width, f32 box_rounding, f32 box_softness, f32 thickness) {
-    jd_Renderer* renderer = jd_RendererGet();
-    jd_Font* font = jd_FontGetByID(font_id);
-    f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
-    jd_UTFDecodedString utf32_string = jd_UnicodeDecodeUTF8String(jd_RendererGet()->frame_arena, jd_UnicodeTF_UTF32, str, false);
-    
-    jd_V2F box_pos = {window_pos.x, window_pos.y};
-    jd_V2F max = jd_CalcStringSize(font_id, utf32_string, wrap_width);
-    
-    switch (baseline) {
-        default: return;
-        
-        case jd_TextOrigin_TopLeft: {
-            break;
-        }
-        
-        case jd_TextOrigin_BottomLeft: {
-            box_pos.y -= max.y;
-            break;
-        }
-    }
-    
-    jd_V3F pos = {window_pos.x, window_pos.y, 0.0f};
-    jd_DrawRect(box_pos, max, bg_color, box_rounding, box_softness, thickness);
-    jd_DrawStringUTF32(font_id, utf32_string, pos, baseline, text_color, wrap_width);
-}
-#endif
-
 f32 jd_FontGetLineAdvForCodepoint(jd_String font_id, u32 codepoint) {
     jd_Renderer* renderer = jd_RendererGet();
     jd_Font* font = jd_FontGetByID(font_id);
@@ -1145,7 +1101,7 @@ f32 jd_FontGetLineHeightForCodepoint(jd_String font_id, u32 codepoint) {
     jd_Font* font = jd_FontGetByID(font_id);
     jd_Glyph* g = jd_FontGetGlyph(font, codepoint);
     f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)g->face->dpi);
-    f32 height = g->face->ascent + g->face->descent;
+    f32 height = (g->size.y * dpi_scaling);
     return height;
 }
 
@@ -1154,14 +1110,12 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
     f32 x = window_pos.x * renderer->dpi_scaling;
     f32 y = window_pos.y * renderer->dpi_scaling;
     f32 z = window_pos.z;
-    
-    f32 dpi_scaling = renderer->dpi_scaling;
-    
+    f32 dpi_scaling = jd_WindowGetDPIScale(renderer->current_window);
     jd_RectF32 rect = {0};
     rect.min.x = x;
     rect.min.y = y;
-    rect.max.x = x + (size.x * dpi_scaling);
-    rect.max.y = y + (size.y * dpi_scaling);
+    rect.max.x = x + (size.x);
+    rect.max.y = y + (size.y);
     
     jd_RectF32 clipped_rect = jd_RectClip(rect, clip_rectangle);
     
@@ -1169,6 +1123,13 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
         clipped_rect.max.y < clipped_rect.min.y) {
         return;
     }
+    
+    jd_V4F inst_rect = {
+        .x0 = rect.min.x, 
+        .y0 = rect.min.y,
+        .x1 = rect.max.x,
+        .y1 = rect.max.y
+    };
     
     rect = clipped_rect;
     
@@ -1180,14 +1141,6 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
         glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 256, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, white_bitmap);
         tex->used_slots++;
     }
-    
-    
-    jd_V4F inst_rect = {
-        .x0 = rect.min.x, 
-        .y0 = rect.min.y,
-        .x1 = rect.max.x,
-        .y1 = rect.max.y
-    };
     
     
     jd_GLVertex top_right = {
@@ -1251,8 +1204,15 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
     jd_RectF32 rect = {0};
     rect.min.x = x;
     rect.min.y = y;
-    rect.max.x = x + (size.x * dpi_scaling);
-    rect.max.y = y + (size.y * dpi_scaling);
+    rect.max.x = x + (size.x);
+    rect.max.y = y + (size.y);
+    
+    jd_V4F inst_rect = {
+        .x0 = rect.min.x, 
+        .y0 = rect.min.y,
+        .x1 = rect.max.x,
+        .y1 = rect.max.y
+    };
     
     if (jd_internal_rectangle_texture == 0) { // realistically this should pretty much never occur
         jd_2DTexture* tex = jd_TexturePoolAddTexture((jd_V2U){256, 256}, 4, jd_2DTextureMode_Font);
@@ -1262,13 +1222,6 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
         glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 256, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, white_bitmap);
         tex->used_slots++;
     }
-    
-    jd_V4F inst_rect = {
-        .x0 = rect.min.x, 
-        .y0 = rect.min.y,
-        .x1 = rect.max.x,
-        .y1 = rect.max.y
-    };
     
     
     jd_GLVertex top_right = {
@@ -1396,7 +1349,7 @@ void jd_RendererSetDPIScale(jd_Renderer* renderer, f32 scale) {
 void jd_RendererBegin(jd_V2F render_size) {
     jd_RendererGet()->render_size = render_size;
     glViewport(0, 0, render_size.w, render_size.h);
-    glClearColor(0.33f, 0.33f, 0.33f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 }
 

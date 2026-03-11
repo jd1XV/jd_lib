@@ -68,7 +68,7 @@ jd_File jd_DiskFileReadFromPath(jd_Arena* arena, jd_String path, b32 null_termin
         file.size += 1;
     
     file.mem = jd_ArenaAlloc(arena, sizeof(u8) * file.size);
-    jd_MemCpy(file.mem, view, file.size);
+    jd_MemCopy(file.mem, view, file.size);
     
     UnmapViewOfFile(view);
     CloseHandle(fmo_handle);
@@ -124,7 +124,7 @@ jd_File jd_DiskFileReadPortionFromPath(jd_Arena* arena, jd_String path, b32 null
     u64 final_size = (null_terminate_portion) ? file.size + 1 : file.size;
     
     file.mem = jd_ArenaAlloc(arena, sizeof(u8) * final_size);
-    jd_MemCpy(file.mem, view, file.size);
+    jd_MemCopy(file.mem, view, file.size);
     
     UnmapViewOfFile(view);
     CloseHandle(fmo_handle);
@@ -149,7 +149,7 @@ b32 jd_DiskWriteFileToPath(jd_File file, jd_String path) {
         return false;
     }
     u8* view = (u8*)MapViewOfFile(fmo_handle, FILE_MAP_WRITE, 0, 0, 0);
-    jd_MemCpy(view, file.mem, file.size);
+    jd_MemCopy(view, file.mem, file.size);
     FlushViewOfFile(view, file.size);
     UnmapViewOfFile(view);
     

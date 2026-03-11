@@ -23,7 +23,7 @@ jd_String jd_StringPush(jd_Arena* arena, jd_String str) {
         .count = str.count
     };
     
-    jd_MemCpy(string.mem, str.mem, str.count);
+    jd_MemCopy(string.mem, str.mem, str.count);
     return string;
 }
 
@@ -51,7 +51,7 @@ jd_String jd_StringPushVAList(jd_Arena* arena, jd_String fmt_string, va_list lis
 jd_String jd_StringGetPrefix(jd_String str, jd_String pattern) {
     jd_String s = str;
     for (u64 i = 0; i + pattern.count < str.count; i++) {
-        if (jd_MemCmp(&str.mem[i], pattern.mem, pattern.count)) {
+        if (jd_MemCompare(&str.mem[i], pattern.mem, pattern.count)) {
             s.count = i;
             return s;
         }
@@ -63,7 +63,7 @@ jd_String jd_StringGetPrefix(jd_String str, jd_String pattern) {
 jd_String jd_StringGetPostfix(jd_String str, jd_String pattern) {
     jd_String s = str;
     for (u64 i = 0; i + pattern.count < str.count; i++) {
-        if (jd_MemCmp(&str.mem[i], pattern.mem, pattern.count)) {
+        if (jd_MemCompare(&str.mem[i], pattern.mem, pattern.count)) {
             s.mem = &str.mem[i + 1];
             s.count = str.count - i;
         }
@@ -97,7 +97,7 @@ jd_String jd_StringPushRemoveChars(jd_Arena* arena, jd_String str, jd_String str
 
 b32 jd_StringMatch(jd_String a, jd_String b) {
     if (a.count != b.count) return false;
-    return jd_MemCmp(a.mem, b.mem, a.count);
+    return jd_MemCompare(a.mem, b.mem, a.count);
 }
 
 b32 jd_StringContainsSubstring(jd_String string, jd_String substring) {
@@ -108,8 +108,37 @@ b32 jd_StringContainsSubstring(jd_String string, jd_String substring) {
             return false;
         }
         
-        b32 cmp = jd_MemCmp(string.mem + i, substring.mem, substring.count);
+        b32 cmp = jd_MemCompare(string.mem + i, substring.mem, substring.count);
         if (cmp) return true;
+    }
+    
+    return false;
+}
+
+static jd_ForceInline b32 jd_Internal_AlphaCmp(c8* cbuf_string, c8* cbuf_substring, u64 size, b32 case_sensitive) {
+    if (!case_sensitive) {
+        for (u64 i = 0; i < size; i++) {
+            c8 c = cbuf_substring[i];
+            c8 oppo = 0;
+            if (c > 64 && c < 91) oppo = c + 32;
+            else if (c > 96 && c < 123) oppo = c - 32;
+            else oppo = c;
+            
+            if (*(cbuf_string + i) != *(cbuf_substring + i) && *(cbuf_string + i) != oppo) return false;
+        }
+        return true;
+    } else {
+        return jd_MemCompare(cbuf_string, cbuf_substring, size);
+    }
+}
+
+b32 jd_StringContainsSubstringCaseInsensitive(jd_String string, jd_String substring) {
+    if (substring.count > string.count) return false;
+    
+    for (u64 i = 0; i < string.count; i++) {
+        if (string.count - i < substring.count) return false;
+        b32 match = jd_Internal_AlphaCmp(string.mem + i, substring.mem, substring.count, false);
+        if (match) return true;
     }
     
     return false;
@@ -144,7 +173,7 @@ void jd_DStringClear(jd_DString* d_string) {
 void jd_DStringAppend(jd_DString* d_string, jd_String app) {
     u8* ptr = jd_ArenaAlloc(d_string->arena, app.count);
     d_string->count += app.count;
-    jd_MemCpy(ptr, app.mem, app.count);
+    jd_MemCopy(ptr, app.mem, app.count);
 }
 
 void jd_DStringAppendF(jd_DString* d_string, jd_String app_fmt, ...) {
@@ -205,7 +234,6 @@ jd_ExportFn jd_String jd_StringFromU64(jd_Arena* arena, u64 integer, u64 radix) 
     return str;
 }
 
-
 void jd_DStringAppendU8(jd_DString* d_string, u8 num, u32 radix) {
     u64 places = 0; 
     for (u64 quot = num; quot > 0; quot /= radix) {
@@ -264,7 +292,7 @@ void jd_DStringAppendI64(jd_DString* d_string, i64 num, u32 radix) {
 
 void jd_DStringAppendBin(jd_DString* d_string, u64 size, void* ptr) {
     u8* dst = jd_ArenaAlloc(d_string->arena, size);
-    jd_MemCpy(dst, ptr, size);
+    jd_MemCopy(dst, ptr, size);
 }
 
 u64 jd_U64FromString(jd_String number_s, u64 radix) {

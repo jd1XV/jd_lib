@@ -52,6 +52,8 @@ typedef struct jd_V2F {
     
 } jd_V2F;
 
+#define jd_V2FEq(a, b) (a.x == b.x && a.y == b.y)
+
 #define jd_V2F(x, y) (jd_V2F){x, y}
 
 typedef struct jd_V3F {

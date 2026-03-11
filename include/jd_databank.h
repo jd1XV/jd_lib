@@ -72,6 +72,7 @@ typedef struct jd_DataNode {
 
 typedef struct jd_DataBank {
     jd_Arena* arena;
+    u64 arena_refresh_pos;
     jd_RWLock* lock;
     
     u64 primary_key_index;

@@ -17,7 +17,6 @@ typedef struct jd_UIStyle {
     jd_V4F bg_color_active;
     
     jd_V4F label_color;
-    jd_V2F label_padding;
     
     jd_V2F padding;
     
@@ -76,7 +75,8 @@ typedef enum jd_UIBoxFlags {
     jd_UIBoxFlags_TextEdit             = 1 << 6,
     jd_UIBoxFlags_ScrollX              = 1 << 7,
     jd_UIBoxFlags_ScrollY              = 1 << 8,
-    jd_UIBoxFlags_DragandDrop          = 1 << 9
+    jd_UIBoxFlags_DragandDrop          = 1 << 9,
+    jd_UIBoxFlags_Multiline            = 1 << 10
 } jd_UIBoxFlags;
 
 
@@ -84,6 +84,7 @@ typedef struct jd_UIBoxRec {
     jd_UITag   tag;
     jd_String  string_id;
     jd_RectF32 rect;
+    jd_RectF32 rect_clipped;
     jd_V2F     pos; // platform window space
     jd_V2F     label_alignment;
     jd_String  label;
@@ -110,6 +111,9 @@ typedef struct jd_UIBoxRec {
     jd_V2F    fixed_position;
     jd_V2F    reference_point;
     jd_V2F    requested_size;
+    jd_V2F    drag_delta_start_pos;
+    jd_V2F    drag_delta_stop_pos;
+    
     
     struct jd_UIBoxRec* anchor_box;
     jd_V2F anchor_reference_point;
@@ -138,6 +142,7 @@ typedef struct jd_UIViewport {
     jd_UIBoxRec* active;
     jd_UIBoxRec* last_active;
     jd_UIBoxRec* drag_box;
+    jd_UIBoxRec* previous_last_active;
     
     jd_UIBoxRec* builder_parent;
     jd_UIBoxRec* builder_last_box;
@@ -169,6 +174,8 @@ typedef struct jd_UIResult {
     b8 shift_clicked;
     
     b8 text_input;
+    
+    jd_V2F drag_delta;
     
     b8 drag_drop_recieved;
     b8 drag_drop_sent;
@@ -241,11 +248,12 @@ jd_ExportFn jd_UIResult jd_UILabel(jd_String label);
 jd_ExportFn jd_UIResult jd_UILabelSized(jd_String label, jd_UISize size, jd_V2F alignment, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UILabelGrow(jd_String label, jd_V2F alignment);
 jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label);
-jd_ExportFn jd_UIResult jd_UIListButton(jd_String label);
+jd_ExportFn jd_UIResult jd_UIListButton(jd_String label, jd_V2F alignment);
 jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
 jd_ExportFn jd_UIResult jd_UIRowGrowBegin(jd_String string_id, jd_UIStyle* style, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIColGrowBegin(jd_String string_id, jd_UIStyle* style, f32 gap, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size);
+jd_ExportFn jd_UIResult jd_UIInputTextBoxAligned(jd_String string_id, jd_String* string, u64 max_string_size, jd_UIStyle* style, jd_UISize size, jd_V2F alignment);
 jd_ExportFn jd_UIResult jd_UIWindowRegionBegin(jd_V2F min_size, jd_UIStyle* style, jd_UILayoutDir dir, f32 gap);
 jd_ExportFn jd_UIResult jd_UIGrowPadding(jd_String string_id);
 jd_ExportFn jd_UIResult jd_UIFixedPadding(jd_String string_id, jd_V2F fixed_size);
@@ -255,12 +263,7 @@ static jd_UIStyle jd_default_style_dark = {
     .bg_color = {.1f, .1f, .1f, 1.0f},
     .bg_color_hovered = {.2f, .2f, .2f, 1.0f},
     .bg_color_active = {.00f, .00f, .00f, 1.0f},
-    .label_color = {.9f, .9f, .9f, 1.0f},
-    .label_padding = {25.0f, 25.0f},
-    .softness = 0.0f,
-    .rounding = 0.0f,
-    .thickness = 0.0f,
-    .padding = 0.0f
+    .label_color = {.9f, .9f, .9f, 1.0f}
 };
 
 static jd_UIStyle jd_invisible_style = {

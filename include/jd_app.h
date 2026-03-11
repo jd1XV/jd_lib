@@ -113,7 +113,7 @@ b32        jd_AppPlatformUpdate(jd_App* app);
 void       jd_AppSetCursor(jd_Cursor cursor);
 void       jd_WindowSetMinimumSize(jd_Window* window, jd_V2F size);
 
-jd_ExportFn u64  jd_AppCurrentFrame();
+jd_ExportFn u64  jd_AppCurrentFrame(jd_App* app);
 jd_ExportFn void jd_AppDefaultTitlebar(jd_Window* window);
 
 #ifdef JD_WINDOWS
