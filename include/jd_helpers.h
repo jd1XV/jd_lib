@@ -11,9 +11,9 @@
 #define MEGABYTES(x) (KILOBYTES(x) * 1024)
 #define GIGABYTES(x) (MEGABYTES(x) * 1024ull)
 
-#define IN_KB(x) ((f64)(x / 1024.0f))
-#define IN_MB(x) ((f64)(IN_KB(x) / 1024.0f))
-#define IN_GB(x) ((f64)(IN_MB(x) / 1024.0f))
+#define IN_KB_F(x) ((f64)(x / 1024.0f))
+#define IN_MB_F(x) ((f64)(IN_KB(x) / 1024.0f))
+#define IN_GB_F(x) ((f64)(IN_MB(x) / 1024.0f))
 
 #define jd_ArrayCount(x) (sizeof(x)/sizeof(*(x)))
 #define jd_Min(a, b) ( ((a) < (b)) ? (a):(b) )

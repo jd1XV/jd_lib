@@ -149,7 +149,7 @@ void jd_AppLoadLib(jd_App* app) {
     jd_DStringAppend(package_name_str, jd_StrLit("_lib"));
     jd_DStringAppend(package_name_str, jd_StrLit(".dll"));
     
-    if (app->lib_file_name.count == 0) 
+    if (app->lib_file_name.count == 0)
         app->lib_file_name = jd_StringPush(app->arena, jd_DStringGet(package_name_str));
     
     if (!jd_DiskPathExists(app->lib_file_name)) {
@@ -209,24 +209,15 @@ void jd_AppUpdatePlatformWindows(jd_App* app) {
     jd_UserLockGet(app->lock);
     static u64 reload_delay = 0;
     if (app->mode == JD_AM_RELOADABLE) {
-        if (reload_delay && reload_delay % 32 == 0) {
-            u64 last_reload_time = app->reloadable_dll_file_time;
-            u64 current_reload_time = jd_DiskGetFileLastMod(app->lib_file_name);
-            if (last_reload_time < current_reload_time) {
-                jd_AppFreeLib(app);
-                jd_AppLoadLib(app);
-                app->reloadable_dll_file_time = current_reload_time;
-                reload_delay = 0;
-            }
-        } else {
-            reload_delay++;
-        }
-#if 0
-        u64 last_reload_time = app->reloadable_dll_file_time;
         u64 current_reload_time = jd_DiskGetFileLastMod(app->lib_file_name);
+        u64 last_reload_time = app->reloadable_dll_file_time;
+        if (!last_reload_time) {
+            app->reloadable_dll_file_time = current_reload_time;
+            last_reload_time = current_reload_time;
+        }
         
         if (last_reload_time < current_reload_time) {
-            if (reload_delay && reload_delay % 32 == 0) {
+            if (reload_delay && reload_delay % 256 == 0) {
                 jd_AppFreeLib(app);
                 jd_AppLoadLib(app);
                 app->reloadable_dll_file_time = current_reload_time;
@@ -234,9 +225,7 @@ void jd_AppUpdatePlatformWindows(jd_App* app) {
             } else {
                 reload_delay++;
             }
-            
         }
-#endif
     }
     
     for (u64 i = 0; i < app->window_count; i++) {
@@ -312,26 +301,16 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
     
     titlebar_height *= jd_WindowGetDPIScale(window);
     
-    jd_UIStyle menu_style = {
-        .bg_color = {0.08f, .07f, .07f, 1.0f},
-        .bg_color_hovered = {0.12f, 0.12f, 0.12f, 1.0f},
-        .bg_color_active  = {0.04f, .04f, .04f, 1.0f},
-        .label_color      = {1.0f, 1.0f, 1.0f, 1.0f}
-    };
+    jd_UILayout layout = jd_UIMakeLayout(jd_UILayout_LeftToRight, 0.0f);
+    jd_UIShape parent_shape = jd_UIMakeShape(jd_UIGrow, jd_UIFit);
+    jd_UIShape button_shape = jd_UIMakeShape(jd_UIFixed(titlebar_height * 1.5), jd_UIFixed(titlebar_height));
     
-    jd_UISize size = {
-        .rule = {jd_UISizeRule_Grow, jd_UISizeRule_Fixed},
-        .fixed_size = {0.0f, titlebar_height}
-    };
+    jd_UIRegionBegin(jd_StrLit("##jd_default_custom_titlebar"), parent_shape, layout, jd_UIBoxFlags_Clickable);
     
-    jd_UIRegionBegin(jd_StrLit("##jd_default_custom_titlebar"), &menu_style, size, jd_UILayout_LeftToRight, 0, true);
     
-    jd_UISize label_size = {
-        .rule = {jd_UISizeRule_Grow, jd_UISizeRule_Fixed},
-        .fixed_size = {0.0f, titlebar_height}
-    };
+    jd_UIShape caption_shape = jd_UIMakeShape(jd_UIGrow, jd_UIFixed(titlebar_height));
     
-    if (jd_UIButton(window->title, label_size, jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_ActOnClick).l_clicked) {
+    if (jd_UIButtonEx(window->title, caption_shape, (jd_UIColors){0}, (jd_V2F){0.5, 0.5}, jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_ActOnClick).l_clicked ) {
         SendMessage(window->handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(jd_AppGetMousePos(window).x, jd_AppGetMousePos(window).y));
     }
     
@@ -703,6 +682,7 @@ jd_ForceInline void _jd_GetMods(jd_InputEvent* e) {
 
 LRESULT CALLBACK jd_WindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPARAM l_param) {
     static u32 count = 0;
+    static jd_V2F last_mouse_pos = {0};
     jd_InputEvent e = {0};
     jd_Window* window = (jd_Window*)GetWindowLongPtrA(window_handle, 0);
     
@@ -881,7 +861,17 @@ LRESULT CALLBACK jd_WindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPA
         }
         
         case WM_MOUSEMOVE: {
+            u32 x = GET_X_LPARAM(l_param);
+            u32 y = GET_Y_LPARAM(l_param);
             
+            e.mouse_pos.x = (f32)x;
+            e.mouse_pos.y = (f32)y;
+            
+            e.mouse_delta = (jd_V2F){e.mouse_pos.x - last_mouse_pos.x, e.mouse_pos.y - last_mouse_pos.y};
+            last_mouse_pos.x = e.mouse_pos.x;
+            last_mouse_pos.y = e.mouse_pos.y;
+            
+            jd_DArrayPushBack(window->input_events, &e);
             break;
         }
         

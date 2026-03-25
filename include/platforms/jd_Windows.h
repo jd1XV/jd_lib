@@ -32,6 +32,9 @@
 #define jd_AppWindowFunction(x) void x (struct jd_Window* window)
 #endif
 
+#define jd_F32_Max FLT_MAX
+#define jd_F32_Min FLT_MIN
+
 #endif //JD__WINDOWS_H
 
 /*

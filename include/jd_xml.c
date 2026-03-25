@@ -29,6 +29,23 @@ static b32 jd_XMLParserSeekChars(jd_XMLParser* parser, jd_String break_on, b32 s
     return false;
 }
 
+static b32 jd_XMLParserSeekPattern(jd_XMLParser* parser, jd_String pattern, b32 skip_whitespace) {
+    if (skip_whitespace) jd_XMLParserSkipWhitespace(parser);
+    
+    parser->token.mem = parser->input.mem + parser->index;
+    while ((parser->index + pattern.count) < parser->input.count) {
+        jd_String candidate = {parser->input.mem + parser->index, pattern.count};
+        if (jd_StringMatch(candidate, pattern)) {
+            return true;
+        } else {
+            parser->index++;
+            parser->token.count++;
+        }
+    }
+    
+    return false;
+}
+
 static void jd_XMLParserGetNextKey(jd_XMLParser* parser) {
     jd_XMLParserSkipWhitespace(parser);
     parser->token.mem = parser->input.mem + parser->index;
@@ -68,14 +85,14 @@ static jd_String jd_XMLGetAttributeKey(jd_XMLParser* parser) {
         parser->token.count++;
     }
     
-    parser->index++; //skip the equals
+    //parser->index++; //skip the equals
     
     return parser->token;
 }
 
 static jd_String jd_XMLGetAttributeVal(jd_XMLParser* parser) {
     jd_String ret = {0};
-    while (parser->index < parser->input.count && parser->input.mem[parser->index] != '"') {
+    while (parser->index < parser->input.count && parser->input.mem[parser->index] != '"' && parser->input.mem[parser->index] != '\'') {
         parser->index++;
     }
     
@@ -86,7 +103,8 @@ static jd_String jd_XMLGetAttributeVal(jd_XMLParser* parser) {
     parser->token.mem = parser->input.mem + parser->index;
     parser->token.count = 0;
     while (parser->index < parser->input.count && 
-           parser->input.mem[parser->index] != '"') {
+           parser->input.mem[parser->index] != '"' &&
+           parser->input.mem[parser->index] != '\'') {
         parser->index++;
         parser->token.count++;
     }
@@ -95,7 +113,6 @@ static jd_String jd_XMLGetAttributeVal(jd_XMLParser* parser) {
     
     return parser->token;
 }
-
 
 static jd_XMLAttr jd_XMLParseAttribute(jd_XMLParser* parser) {
     jd_XMLAttr attr = {0};
@@ -207,12 +224,18 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
     parser->matched_char = 0;
     jd_String break_str = jd_StrLit("<");
     
+    b32 skip_text = false;
+    
     while (jd_XMLParserSeekChars(parser, jd_StrLit("<"), false)) {
-        if (parser->token.count > 0) {
-            parser->node->text = jd_XMLStringPushEscaped(arena, parser->token);
-        }
-        
         parser->index++;
+        u64 first_index = parser->index;
+        if (parser->token.count > 0 && !skip_text) {
+            parser->node->text = jd_XMLStringPushEscaped(arena, parser->token);
+        } else {
+            skip_text = false;
+        }
+        jd_String inner_text = parser->token;
+        
         jd_XMLParserGetNextKey(parser);
         
         // declaration parsing
@@ -234,12 +257,24 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
             
             jd_XMLParserSeekChars(parser, jd_StrLit("?"), true);
             jd_XMLParserSeekChars(parser, jd_StrLit(">"), true);
-            parser->index++;
+            //parser->index++;
+            continue;
         }
         
-        if (root->decl && jd_StringMatch(parser->token, jd_StrLit("?xml"))) {
+        if (root->decl && jd_StringBeginsWith(parser->token, jd_StrLit("?xml"))) {
             // skip stylesheet info for now
             parser->index++;
+            continue;
+        }
+        
+        else if (jd_StringBeginsWith(parser->token, jd_StrLit("![CDATA["))) {
+            parser->index = first_index + jd_StrLit("![CDATA[").count;
+            parser->token.mem = parser->input.mem + first_index + jd_StrLit("![CDATA[").count;
+            parser->token.count = 0;
+            jd_XMLParserSeekPattern(parser, jd_StrLit("]]>"), false);
+            parser->node->text = jd_StringPush(arena, parser->token);
+            
+            skip_text = true;
             continue;
         }
         
@@ -248,20 +283,27 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
             trunc_str.mem++;
             trunc_str.count--;
             jd_String* last_tag = jd_DArrayGetBack(parser->unclosed_tags);
+            if (last_tag && jd_StringMatch(jd_StrLit("rss"), *last_tag)) {
+                int x = 0;
+            }
+            if (!last_tag) {
+                int x = 0;
+            }
             if (jd_StringMatch(trunc_str, *last_tag)) {
                 jd_DArrayPopBack(parser->unclosed_tags);
                 parser->node = parser->node->parent;
             } else {
-                jd_DArrayRelease(parser->unclosed_tags);
-                return NULL;
+                break;
             }
             
             jd_XMLParserSeekChars(parser, jd_StrLit(">"), true);
-            parser->index++;
         }
         
         else {
             jd_String key = parser->token;
+            if (jd_StringMatch(key, jd_StrLit("button"))) {
+                int x = 0;
+            }
             if (key.count == 0) {
                 jd_LogError("Unable to parse a key from the XML input file", jd_Error_BadInput, jd_Error_Common);
                 parser->error = true;
@@ -294,6 +336,7 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
     }
     
     if (parser->unclosed_tags->count > 0) {
+        jd_String* unclosed_tag = jd_DArrayGetBack(parser->unclosed_tags);
         jd_LogError("Missing closing tag in XML file", jd_Error_BadInput, jd_Error_Common);
         parser->error = true;
         //jd_XML2SetError(parser->root, XML_MISSING_CLOSING_TAG, parser->index);

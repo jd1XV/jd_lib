@@ -69,6 +69,8 @@ typedef struct jd_Glyph {
     jd_V2F size;
     f32 h_advance;
     
+    f32 ascender;
+    f32 descender;
     u32 codepoint;
     jd_Typeface* face;
     

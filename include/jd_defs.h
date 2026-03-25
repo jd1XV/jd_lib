@@ -84,8 +84,8 @@ typedef struct jd_V4F {
         };
         struct {
             f32 x0;
-            f32 x1;
             f32 y0;
+            f32 x1;
             f32 y1;
         };
         struct {
@@ -193,8 +193,6 @@ typedef struct jd_u128 {
 } jd_u128;
 
 #define jd_u128_EQ(a, b) (a.lo == b.lo && a.hi == b.hi)
-
-#define jd_u128_Max (1 << 128ULL)
 
 #pragma section("jd_readonlysec", read)
 #define jd_ReadOnly __declspec(allocate("jd_readonlysec"))

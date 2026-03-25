@@ -1,4 +1,3 @@
-
 #include "dep/glad/glad_wgl.h"
 #include "dep/glad/glad.h"
 
@@ -8,7 +7,7 @@
 static jd_Renderer* jd_global_renderer = 0;
 
 
-jd_String vs_string = jd_StrConst("#version 460\n"
+jd_String vs_string = jd_StrConst("#version 330\n"
                                   "layout (location = 0) in vec3 vert_xyz;\n"
                                   "layout (location = 1) in vec3 vert_uvw;\n"
                                   "layout (location = 2) in vec4 vert_col;\n"
@@ -42,7 +41,7 @@ jd_String vs_string = jd_StrConst("#version 460\n"
                                   "}"
                                   );
 
-jd_String fs_string = jd_StrConst("#version 460\n"
+jd_String fs_string = jd_StrConst("#version 330\n"
                                   "in vec3 fs_xyz;\n"
                                   "in vec3 fs_uvw;\n"
                                   "in vec4 fs_col;\n"
@@ -64,13 +63,13 @@ jd_String fs_string = jd_StrConst("#version 460\n"
                                   "    vec4 color = texture(tex, fs_uvw);\n"
                                   "    \n"
                                   "    float softness = fs_softness;\n"
-                                  "    if (fs_rounding != 0) {\n"
-                                  "        softness = 1.0f;\n"
+                                  "    if (fs_rounding != 0 && fs_softness == 0) {\n"
+                                  "       softness = 1.0;\n"
                                   "    }\n"
-                                  "    vec2 softness_padding = vec2(max(0, (softness * 2)), max(0, (softness * 2)));\n"
+                                  "    vec2 softness_padding = vec2(max(0, (softness * 2 - 1)), max(0, (softness * 2 - 1)));\n"
                                   "    \n"
-                                  "    vec2 p0 = vec2(fs_rect.x, fs_rect.z);\n"
-                                  "    vec2 p1 = vec2(fs_rect.y, fs_rect.w);\n"
+                                  "    vec2 p0 = vec2(fs_rect.x, fs_rect.y);\n"
+                                  "    vec2 p1 = vec2(fs_rect.z, fs_rect.w);\n"
                                   "    \n"
                                   "    vec2 rect_center = vec2(p1 + p0) / 2;\n"
                                   "    vec2 rect_half_size = vec2(p1 - p0) / 2;\n"
@@ -80,13 +79,13 @@ jd_String fs_string = jd_StrConst("#version 460\n"
                                   "    float border_factor = 1.0f;\n"
                                   "    \n"
                                   "    if (fs_thickness > 0) {\n"
-                                  "        vec2 interior_half_size = rect_half_size - vec2(fs_softness * 2.f, fs_softness * 2.f) - vec2(fs_thickness);\n"
+                                  "        vec2 interior_half_size = rect_half_size - vec2(fs_thickness);\n"
                                   "        \n"
                                   "        float interior_radius_reduce = min(interior_half_size.x / rect_half_size.x,\n"
                                   "                                           interior_half_size.y / rect_half_size.y);\n"
                                   "        float interior_corner_radius = (fs_rounding * interior_radius_reduce * interior_radius_reduce);\n"
                                   "        \n"
-                                  "        float inside_d = RoundingSDF(fs_xyz.xy, rect_center, interior_half_size - softness_padding - fs_thickness, interior_corner_radius);\n"
+                                  "        float inside_d = RoundingSDF(fs_xyz.xy, rect_center, interior_half_size - softness_padding, interior_corner_radius);\n"
                                   "        \n"
                                   "        float inside_f = smoothstep(0, 2 * softness, inside_d);\n"
                                   "        border_factor = inside_f;\n"
@@ -355,9 +354,16 @@ jd_Font* jd_FontGetByID(jd_String font_id) {
 }
 
 //-
-/*TODO: RGBA Textures: 
+/*TODO: RGBA 
 
+Ideas: 
 
+* Generate a unique code for each image requested (so for instance, in jd_cast we could request that IDs be created for each thumbnail and store them in the proper header).
+When a unique code is requested by a render command, the image is looked up first in the cache. If the texture is no longer present, it is reloaded from the data store
+into the least recently used slot. This enables an immediate-mode interface, with the downside of possibly requiring some pre-defined disk activity on the backend to 
+write the files to a data store when first indexed. This may not be a real downside however. Most images in most applications would likely be loaded from disk, or from some
+internet source. If you had planned on storing them all in memory, you can still do that with this system by eating the cost of allocating all your images in 
+memory permanently.
 
 */
 //-
@@ -452,6 +458,9 @@ void jd_FontAddTypefaceFromMemory(jd_String font_id, jd_File file, jd_TypefaceUn
             glyph->offset.x = ft_face->glyph->bitmap_left;
             glyph->offset.y = -ft_face->glyph->bitmap_top;
             glyph->h_advance = ft_face->glyph->metrics.horiAdvance / 64;
+            glyph->ascender = ft_face->glyph->metrics.horiBearingY / 64;
+            glyph->descender = -(glyph->size.h - (ft_face->glyph->metrics.horiBearingY / 64));
+            
             glyph->texture = texture;
             glyph->face = face;
             font->glyph_count++;
@@ -467,7 +476,6 @@ void jd_FontAddTypefaceFromMemory(jd_String font_id, jd_File file, jd_TypefaceUn
                     texture = jd_TexturePoolAddTexture(size, texture_depth, jd_2DTextureMode_Font);
                     glBindTexture(GL_TEXTURE_2D_ARRAY, texture->gl_index);
                 }
-                
             }
         }
     }
@@ -517,15 +525,16 @@ b32 jd_Internal_DrawGlyph(jd_Font* font, jd_V3F window_pos, jd_V4F col, jd_Glyph
     f32 z = window_pos.z;
     
     jd_RectF32 rect = {0};
-    rect.min.x = x + g->offset.x * dpi_scaling;
-    rect.min.y = y + g->offset.y * dpi_scaling;
-    rect.max.x = rect.min.x + (g->size.x * dpi_scaling);
-    rect.max.y = rect.min.y + (g->size.y * dpi_scaling);
+    rect.min.x = x + (f32)g->offset.x * dpi_scaling;
+    rect.min.y = y + (f32)g->offset.y * dpi_scaling;
+    rect.max.x = rect.min.x + (((f32)g->size.x) * dpi_scaling);
+    rect.max.y = rect.min.y + (((f32)g->size.y) * dpi_scaling);
     
     jd_RectF32 clipped_rect = jd_RectClip(rect, clip_rectangle);
     
     if (clipped_rect.max.x < clipped_rect.min.x ||
         clipped_rect.max.y < clipped_rect.min.y) {
+        *advance_out += (g->h_advance * dpi_scaling);
         return false;
     }
     
@@ -610,7 +619,7 @@ b32 jd_Internal_DrawGlyph(jd_Font* font, jd_V3F window_pos, jd_V4F col, jd_Glyph
     jd_DArrayPushBack(vertices, &top_right);
     
     
-    *advance_out += g->h_advance * dpi_scaling;
+    *advance_out += (g->h_advance * dpi_scaling);
     
     return true;
 }
@@ -715,9 +724,11 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
     b8 wrap = (wrap_width > 0.0f);
     
     if (!wrap) {
+        f32 highest_asc = 0;
+        f32 lowest_desc = 0;
         for (u64 i = 0; i < utf32_string.count; i++) {
             if (utf32_string.utf32[i] == 0x0a) {
-                size.y += font->faces[0].line_adv * dpi_scaling;
+                size.y += fallback->face->line_adv * dpi_scaling;
                 pos.x = 0.0f;
                 continue;
             }
@@ -736,12 +747,14 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
             }
             
             size.x += g->h_advance * dpi_scaling;
-            size.y = jd_Max(size.y, (g->face->ascent + g->face->descent) * dpi_scaling);
+            lowest_desc = jd_Min(g->descender, lowest_desc);
+            size.y = jd_Max(size.y, (g->face->ascent + g->face->descent - lowest_desc) * dpi_scaling);
         }
     }  else {
         for (u64 i = 0; i < utf32_string.count; i++) {
+            
             if (utf32_string.utf32[i] == 0x0a) {
-                size.y += font->faces[0].line_adv * dpi_scaling;
+                size.y += fallback->face->line_adv * dpi_scaling;
                 pos.x = 0.0f;
                 continue;
             }
@@ -755,6 +768,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
             }
             
             jd_Glyph* g = jd_FontGetGlyph(font, utf32_string.utf32[i]);
+            
             if (!g || g->codepoint == 0) {
                 g = fallback;
             }
@@ -772,6 +786,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
             }
         }
     }
+    
     
     return size;
 }
@@ -1148,9 +1163,9 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
         .tx = {1.0f, 1.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_GLVertex bottom_right = {
@@ -1158,9 +1173,9 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
         .tx = {1.0f, 0.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_GLVertex bottom_left = {
@@ -1168,9 +1183,9 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
         .tx = {0.0f, 0.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_GLVertex top_left = {
@@ -1178,9 +1193,9 @@ void jd_DrawRectWithZ(jd_V3F window_pos, jd_V2F size, jd_V4F col, f32 rounding, 
         .tx = {0.0f, 1.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_DArray* vertices = renderer->vertices;
@@ -1229,9 +1244,9 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
         .tx = {1.0f, 1.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_GLVertex bottom_right = {
@@ -1239,9 +1254,9 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
         .tx = {1.0f, 0.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_GLVertex bottom_left = {
@@ -1249,9 +1264,9 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
         .tx = {0.0f, 0.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_GLVertex top_left = {
@@ -1259,9 +1274,9 @@ void jd_DrawRect(jd_V2F window_pos, jd_V2F size, jd_V4F col, f32 rounding, f32 s
         .tx = {0.0f, 1.0f, 0.0f},
         .col = col,
         .rect = inst_rect,
-        .rounding = rounding * dpi_scaling,
-        .softness = softness * dpi_scaling,
-        .thickness = thickness * dpi_scaling
+        .rounding = rounding,
+        .softness = softness,
+        .thickness = thickness
     };
     
     jd_DArray* vertices = renderer->vertices;
