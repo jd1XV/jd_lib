@@ -1,5 +1,5 @@
 
-jd_ReadOnly static u64 _jd_ui_internal_default_seed = 104720809;
+jd_ReadOnly static u32 _jd_ui_internal_default_seed = 104720809;
 
 typedef struct jd_Internal_UIState {
     jd_Arena* arena;
@@ -28,7 +28,7 @@ static jd_Internal_UIState _jd_internal_ui_state = {0};
 jd_V2F jd_UIParentSize(jd_UIBoxRec* box) {
     if (box->parent) {
         return box->parent->rect.max;
-    } else return box->vp->size;
+    } else return (jd_V2F){box->vp->size.x, box->vp->size.y};
 }
 
 jd_UIViewport* jd_UIViewportGetCurrent() {
@@ -382,7 +382,7 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
         parent = vp->popup_root_new;
     }
     
-    b->draw_index = vp->box_count;
+    //b->draw_index = vp->box_count;
     vp->box_count++;
     
     // input handling
@@ -539,7 +539,7 @@ jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
     
     jd_UIViewport* vp = viewport;
     vp->size = jd_WindowGetDrawSize(viewport->window);
-    jd_WindowSetMinimumSize(vp->window, vp->minimum_size);
+    jd_WindowSetMinimumSize(vp->window, (jd_V2I){vp->minimum_size.x, vp->minimum_size.y});
     
     for (u64 i = 0; i < _jd_internal_ui_state.viewport_count; i++) {
         if (&_jd_internal_ui_state.viewports[i] == viewport) {
@@ -548,7 +548,7 @@ jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
         }
     }
     
-    vp->root->rect.max = vp->window->size;
+    vp->root->rect.max = (jd_V2F){vp->window->size.x, vp->window->size.y};
     
     // Get new inputs
     vp->old_inputs = vp->new_inputs;
@@ -571,11 +571,9 @@ jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
     vp->popup_root_new = old_popup_root;
     jd_TreeLinksClear(vp->popup_root_new);
     
-    if (jd_AppWindowIsActive(viewport->window)) {
-        vp->hot = jd_UIPickBoxForPos(vp, mouse_pos);
-        if (vp->hot) jd_AppSetCursor(vp->hot->cursor);
-        jd_UIPickActiveBox(vp);
-    }
+    vp->hot = jd_UIPickBoxForPos(vp, mouse_pos);
+    if (vp->hot) jd_AppSetCursor(vp->hot->cursor);
+    jd_UIPickActiveBox(vp);
     
     jd_UIPruneUnusedBoxes();
     
@@ -706,11 +704,14 @@ void jd_UI_Internal_SolveFitChildrenSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             }
             if (child_count && b->layout.axis == axis)
                 b->rect.max.val[axis] += (child_count - 1) * b->layout.gap;
-            b->rect.max.val[axis] = size + (b->shape.padding.val[axis] * 2);
             
+            b->rect.max.val[axis] += jd_Max(size, 0) + (b->shape.padding.val[axis] * 2);
+            
+            if (!child_count && b->label.count) {
+                b->rect.max.val[axis] += jd_CalcStringSizeUTF8(b->font_id, b->label, 0.0f).val[axis];
+            }
+            b->requested_size.val[axis] = b->rect.max.val[axis];
         }
-        
-        b->requested_size.val[axis] = b->rect.max.val[axis];
         jd_TreeTraversePostorder(b);
     }
 }
@@ -819,7 +820,7 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         jd_UILayout layout = b->layout;
         jd_UIShape shape  = b->shape;
         
-        f32 z = (root == vp->popup_root_new) ? 0.0 : (1.0 / (b->draw_index + 1));
+        f32 z = 0.0;
         
         jd_V4F color        = b->color;
         
@@ -831,8 +832,8 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         jd_V2F rect_size = b->rect.max;
         
         jd_RectF32 clipping_rectangle_self = {
-            .min = {b->rect.min.x + b->shape.padding.x, b->rect.min.y + b->shape.padding.y},
-            .max = {b->rect.min.x + (b->rect.max.x - b->shape.padding.x), b->rect.min.y + (b->rect.max.y - b->shape.padding.y)}
+            .min = {b->rect.min.x, b->rect.min.y},
+            .max = {b->rect.min.x + (b->rect.max.x), b->rect.min.y + (b->rect.max.y)}
         };
         
         jd_RectF32 clipping_rectangle_parent = {0};
@@ -851,7 +852,8 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         b->rect_clipped = jd_RectClip(clipping_rectangle_self, clipping_rectangle_parent);
         
         jd_V2F string_pos = {rect_pos.x + b->shape.padding.x, rect_pos.y + b->shape.padding.y};
-        jd_DrawRectWithZ(rect_pos, rect_size, color, corner_radius, softness, thickness, clipping_rectangle_parent);
+        if (!(b->flags & jd_UIBoxFlags_InvisibleBG))
+            jd_DrawRectWithZ(rect_pos, rect_size, color, corner_radius, softness, thickness, clipping_rectangle_parent);
         if (b->shape.stroke_width > 0) {
             jd_DrawRectWithZ(rect_pos, rect_size, colors.stroke, corner_radius, 1.0f, b->shape.stroke_width, clipping_rectangle_parent);
         }
@@ -1207,7 +1209,7 @@ jd_UILayout jd_UIMakeLayout(jd_UILayoutDir dir, f32 gap) {
 
 jd_UIResult jd_UILabel(jd_String label) {
     jd_UIBoxConfig config = {0};
-    config.flags = jd_UIBoxFlags_StaticColor;
+    config.flags = jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_InvisibleBG;
     config.string_id = _jd_UIStringGetHashPart(label);
     config.label = _jd_UIStringGetDisplayPart(label);
     jd_UIShape shape = jd_UIMakeShape(jd_UIFitText, jd_UIFitText);
@@ -1253,14 +1255,14 @@ jd_UIResult jd_UIFixedSizeLabel(jd_String label, jd_V2F alignment, jd_V2F size) 
     return result;
 }
 
-jd_UIResult jd_UILabelButton(jd_String label, jd_UIBoxFlags flags) {
+jd_UIResult jd_UILabelButton(jd_String label, jd_V2F padding, jd_UIBoxFlags flags) {
     jd_UIBoxConfig config = {0};
     config.flags = jd_UIBoxFlags_Clickable;
     config.string_id = _jd_UIStringGetHashPart(label);
     config.label = _jd_UIStringGetDisplayPart(label);
     config.cursor = jd_Cursor_Hand;
     
-    jd_UIShape shape = jd_UIMakeShape(jd_UIFitText, jd_UIFitText);
+    jd_UIShape shape = jd_UIMakeShapeEx(jd_UIFitText, jd_UIFitText, padding.x, padding.y, 0, 0, 0, 0);
     config.shape = shape;
     
     jd_UIResult result = jd_UIBoxBegin(&config);
@@ -1338,7 +1340,7 @@ jd_UIResult jd_UISlider(jd_String string_id, jd_UIShape shape, jd_UIShape shape_
     slider_config.reference_point = (jd_V2F){0.5, 0.5};
     slider_config.draggable = true;
     
-    slider_config.fixed_position.val[axis] = under->rect.min.val[axis] + ((under->rect.max.val[axis] - shape.rules[axis].fixed_size) * under->slider_pos);
+    slider_config.fixed_position.val[axis] = under->rect.min.val[axis] + ((under->rect.max.val[axis] - shape_button.rules[axis].fixed_size) * under->slider_pos);
     f32 offaxis_diff = (under->rect.max.val[!axis] - shape.rules[!axis].fixed_size) * slider_config.reference_point.val[!axis];
     slider_config.fixed_position.val[!axis] = under->rect.min.val[!axis] + offaxis_diff;
     
@@ -1462,7 +1464,7 @@ jd_UIResult jd_UIInputTextBoxWithHint(jd_String string_id, jd_UIShape shape, jd_
 jd_UIResult jd_UIRowGrowBegin(jd_String string_id, jd_V2F padding, f32 gap, jd_UIBoxFlags flags) {
     jd_UIBoxConfig config = {0};
     config.flags = flags;
-    config.flags |= jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_InvisibleBG;
+    config.flags |= jd_UIBoxFlags_StaticColor;
     config.string_id  = string_id;
     jd_UILayout layout = jd_UIMakeLayout(jd_UILayout_LeftToRight, gap);
     jd_UIShape  shape  = jd_UIMakeShapeEx(jd_UIGrow, jd_UIFit, padding.x, padding.y, 0.0f, 0.0f, 0.0f, 0.0f); 
@@ -1478,7 +1480,7 @@ jd_UIResult jd_UIRowGrowBegin(jd_String string_id, jd_V2F padding, f32 gap, jd_U
 jd_UIResult jd_UIColGrowBegin(jd_String string_id, jd_V2F padding, f32 gap, jd_UIBoxFlags flags) {
     jd_UIBoxConfig config = {0};
     config.flags = flags;
-    config.flags |= jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_InvisibleBG;
+    config.flags |= jd_UIBoxFlags_StaticColor;
     config.string_id = string_id;
     jd_UILayout layout = jd_UIMakeLayout(jd_UILayout_TopToBottom,gap);
     jd_UIShape  shape  = jd_UIMakeShapeEx(jd_UIFit, jd_UIGrow, padding.x, padding.y, 0.0f, 0.0f, 0.0f, 0.0f); 

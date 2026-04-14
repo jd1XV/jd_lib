@@ -19,7 +19,7 @@ jd_ExportFn b32 jd_DiskDirectoryCreate(jd_String path);
 
 jd_ExportFn jd_File jd_DiskFileReadFromPath(jd_Arena* arena, jd_String path, b32 null_terminate);
 jd_ExportFn jd_File jd_DiskFileReadPortionFromPath(jd_Arena* arena, jd_String path, b32 null_terminate_blocks, u64 start, u64 end);
-jd_ExportFn b32     jd_DiskWriteFileToPath(jd_File file, jd_String path);
+jd_ExportFn b32     jd_DiskFileWriteToPath(jd_File file, jd_String path);
 
 
 #ifdef JD_IMPLEMENTATION

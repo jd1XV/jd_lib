@@ -141,9 +141,14 @@ typedef struct jd_V2I {
             i32 y;
         };
         struct {
+            i32 u;
+            i32 v;
+        };
+        struct {
             i32 w;
             i32 h;
         };
+        i32 val[2];
     };
     
 } jd_V2I;

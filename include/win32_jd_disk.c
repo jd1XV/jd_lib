@@ -133,7 +133,7 @@ jd_File jd_DiskFileReadPortionFromPath(jd_Arena* arena, jd_String path, b32 null
     return file;
 }
 
-b32 jd_DiskWriteFileToPath(jd_File file, jd_String path) {
+b32 jd_DiskFileWriteToPath(jd_File file, jd_String path) {
     HANDLE handle = CreateFileA(path.mem, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
     if (handle == INVALID_HANDLE_VALUE) {
         // err

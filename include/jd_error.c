@@ -37,7 +37,7 @@ void _jd_ErrorToString(jd_Error* err, jd_DString* d_string) {
 void jd_ErrorLogFlushToDisk() {
     jd_DString* out = _jd_internal_error_log->output_string;
     jd_String errors = jd_DStringGet(out);
-    jd_DiskWriteFileToPath(errors, jd_StrLit("generated/error_log.txt"));
+    jd_DiskFileWriteToPath(errors, jd_StrLit("generated/error_log.txt"));
     jd_ArenaPopTo(_jd_internal_error_log->arena, _jd_internal_error_log->refresh_pos);
     _jd_internal_error_log->count = 0;
     jd_DStringClear(out);

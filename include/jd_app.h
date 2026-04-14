@@ -37,10 +37,12 @@ jd_ReloadableFunction
 #define JD_APP_MAX_WINDOWS 2048
 
 typedef struct jd_Window jd_Window;
-jd_ExportFn jd_V2F jd_WindowGetDrawSize(jd_Window* window);
+jd_ExportFn jd_V2I jd_WindowGetDrawSize(jd_Window* window);
 jd_ExportFn jd_V2F jd_WindowGetScaledSize(jd_Window* window);
 jd_ExportFn f64 jd_WindowGetDPIScale(jd_Window* window);
 jd_ExportFn f32 jd_WindowGetFrameTime(jd_Window* window);
+jd_ExportFn u32 jd_WindowGetDPI(jd_Window* window);
+void jd_WindowMakeCurrent(window);
 
 typedef struct jd_App jd_App;
 jd_App* jd_AppCreate(struct jd_AppConfig* config);
@@ -103,15 +105,13 @@ typedef struct jd_WindowConfig {
     jd_TitleBarFunctionPtr titlebar_function_ptr;
 } jd_WindowConfig;
 
-typedef struct jd_Window jd_Window;
-
 void       jd_AppUpdatePlatformWindows(jd_App* app);
 jd_Window* jd_AppCreateWindow(jd_WindowConfig* config);
 b32        jd_AppWindowIsActive(jd_Window* window);
 void       jd_AppPlatformCloseWindow(jd_Window* window);
 b32        jd_AppPlatformUpdate(jd_App* app);
 void       jd_AppSetCursor(jd_Cursor cursor);
-void       jd_WindowSetMinimumSize(jd_Window* window, jd_V2F size);
+void       jd_WindowSetMinimumSize(jd_Window* window, jd_V2I size);
 
 jd_ExportFn u64  jd_AppCurrentFrame(jd_App* app);
 jd_ExportFn void jd_AppDefaultTitlebar(jd_Window* window);

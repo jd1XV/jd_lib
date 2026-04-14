@@ -27,6 +27,21 @@ typedef struct jd_UTFDecodedString {
     u64 count;
 } jd_UTFDecodedString;
 
+typedef struct jd_String32 {
+    u32* mem;
+    u64  count;
+} jd_String32;
+
+typedef struct jd_String16 {
+    u16* mem;
+    u64  count;
+} jd_String16;
+
+jd_ExportFn jd_String16 jd_UTF8ToUTF16(jd_Arena* arena, jd_String string);
+jd_ExportFn jd_String32 jd_UTF8ToUTF32(jd_Arena* arena, jd_String string);
+jd_ExportFn jd_String   jd_UTF16toUTF8(jd_Arena* arena, jd_String16 string);
+jd_ExportFn jd_String   jd_UTF32toUTF8(jd_Arena* arena, jd_String32 string);
+
 // 0xxxxxxx
 // 110xxxxx 10xxxxxx
 // 1110xxxx 10xxxxxx 10xxxxxx
@@ -34,6 +49,7 @@ typedef struct jd_UTFDecodedString {
 
 #define _jd_PackU64_u8(a,b,c,d, e,f,g,h) \
 (a << 56) + (b << 48) + (c << 40) + (d << 32) + (e << 24) + (f << 16) + (g << 8) + h
+
 
 jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf, jd_String input, b32 validate);
 jd_String jd_UnicodeEncodeUTF32toUTF8(jd_Arena* arena, jd_UTFDecodedString input, b32 validate);

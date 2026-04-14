@@ -29,13 +29,14 @@
 #include "jd_file.h"
 #include "jd_disk.h"
 #include "jd_input.h"
-#include "jd_renderer.h"
 #include "jd_app.h"
+#include "jd_renderer.h"
 #include "jd_ui.h"
 #include "jd_timer.h"
 #include "jd_databank.h"
 #include "jd_threads.h"
 #include "jd_xml.h"
+#include "jd_font.h"
 
 #ifdef JD_DEBUG
 #include "jd_debug.h"
@@ -51,6 +52,7 @@
 #include "win32_jd_app.c"
 #include "win32_jd_timer.c"
 #include "win32_jd_threads.c"
+#include "win32_jd_font.c"
 
 #ifdef JD_DEBUG
 #include "win32_jd_debug.c"

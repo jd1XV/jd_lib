@@ -31,9 +31,9 @@ struct jd_Window {
     jd_App* app;
     jd_Arena* arena;
     jd_Arena* frame_arena;
-    jd_V2F pos;
-    jd_V2F size;
-    jd_V2F minimum_size;
+    jd_V2I pos;
+    jd_V2I size;
+    jd_V2I minimum_size;
     
     jd_DArray* input_events; // type: jd_InputEvent (jd_input.h)
     
@@ -65,7 +65,7 @@ b32 jd_AppWindowIsMaximized(jd_Window* window) {
     } else return false;
 }
 
-void jd_WindowSetMinimumSize(jd_Window* window, jd_V2F size) {
+void jd_WindowSetMinimumSize(jd_Window* window, jd_V2I size) {
     window->minimum_size = size;
 }
 
@@ -196,13 +196,26 @@ void jd_AppUpdatePlatformWindow(jd_Window* window) {
     i32 padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
 #endif
     
-    wglMakeCurrent(window->device_context, window->app->ogl_context);
+    jd_WindowMakeCurrent(window);
+    jd_2DRendererBindWindow(window);
+    jd_2DRendererBegin(window);
+#if 0
     jd_RendererGet()->current_window = window;
-    jd_RendererBegin(window->size);
+    jd_RendererBegin((jd_V2F){window->size.x, window->size.y});
+#endif
     window->func(window);
+    
+#if 0    
     jd_RendererDraw();
+#endif
+    
+    jd_2DRendererDraw();
     jd_ArenaPopTo(jd_RendererGet()->frame_arena, 0);
     SwapBuffers(window->device_context);
+}
+
+void jd_WindowMakeCurrent(jd_Window* window) {
+    wglMakeCurrent(window->device_context, window->app->ogl_context);
 }
 
 void jd_AppUpdatePlatformWindows(jd_App* app) {
@@ -323,7 +336,6 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
         if (jd_UIFixedSizeButton(label, (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
             if (jd_AppWindowIsMaximized(window)) {
                 ShowWindow(window->handle, SW_RESTORE);
-                
             } else {
                 ShowWindow(window->handle, SW_MAXIMIZE);
                 //SendMessage(window->handle, WM_SIZE, SIZE_MAXIMIZED, 0);
@@ -345,7 +357,7 @@ void jd_AppLoadSystemFont(jd_Arena* arena) {
     jd_File icons    = jd_DiskFileReadFromPath(s.arena, jd_StrLit("assets/jd_font_custom.ttf"), false);
     
     jd_FontCreateEmpty(jd_StrLit("OS_BaseFont"), MEGABYTES(32), 16);
-    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), segoe_ui, &jd_unicode_range_bmp, 11, 192);
+    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), segoe_ui, &jd_unicode_range_basic_latin, 11, 192);
     jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), icons, &jd_unicode_range_all, 11, 192);
     
     jd_ScratchArenaRelease(s);
@@ -599,6 +611,7 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     ShowWindow(window->handle, SW_SHOW);
     
     if (!config->app->renderer_initialized) {
+        jd_2DRendererInit();
         jd_RendererInit();
         jd_AppLoadSystemFont(config->app->arena);
         config->app->renderer_initialized = true;
@@ -916,14 +929,14 @@ jd_App* jd_AppCreate(jd_AppConfig* config) {
     return app;
 }
 
-jd_V2F jd_WindowGetDrawSize(jd_Window* window) {
+jd_V2I jd_WindowGetDrawSize(jd_Window* window) {
     // get the size
     RECT client_rect = {0};
     GetClientRect(window->handle, &client_rect);
     window->size.w = client_rect.right;
     window->size.h = client_rect.bottom;
     
-    jd_V2F draw_size = {window->size.x, window->size.y};
+    jd_V2I draw_size = {window->size.x, window->size.y};
     
     return draw_size;
 }
@@ -948,9 +961,13 @@ f64 jd_WindowGetDPIScale(jd_Window* window) {
 }
 
 b32 jd_AppWindowIsActive(jd_Window* window) {
-    HWND handle = GetActiveWindow();
+    HWND handle = GetForegroundWindow();
     if (window->handle != handle) return false;
     else return true;
+}
+
+b32 jd_AppWindowIsVisibleAndHovered(jd_Window* window) {
+    return true;
 }
 
 f32 jd_WindowGetFrameTime(jd_Window* window) {

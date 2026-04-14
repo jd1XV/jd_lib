@@ -6,102 +6,102 @@
 
 static jd_Renderer* jd_global_renderer = 0;
 
-
-jd_String vs_string = jd_StrConst("#version 330\n"
-                                  "layout (location = 0) in vec3 vert_xyz;\n"
-                                  "layout (location = 1) in vec3 vert_uvw;\n"
-                                  "layout (location = 2) in vec4 vert_col;\n"
-                                  "layout (location = 3) in vec4 vert_rect;\n"
-                                  "layout (location = 4) in float rounding;\n"
-                                  "layout (location = 5) in float softness;\n"
-                                  "layout (location = 6) in float thickness;\n"
-                                  "\n"
-                                  "out vec3 fs_xyz;\n"
-                                  "out vec3 fs_uvw;\n"
-                                  "out vec4 fs_col;\n"
-                                  "out vec4 fs_rect;\n"
-                                  "out float fs_rounding;\n"
-                                  "out float fs_softness;\n"
-                                  "out float fs_thickness;\n"
-                                  "\n"
-                                  "uniform vec2 screen_conv;\n"
-                                  "\n"
-                                  "void main(){\n"
-                                  "    gl_Position.x = (vert_xyz.x * screen_conv.x) - 1;\n"
-                                  "    gl_Position.y = 1 - (vert_xyz.y * screen_conv.y);\n"
-                                  "    gl_Position.z = vert_xyz.z;\n"
-                                  "    gl_Position.w = 1;\n"
-                                  "    fs_uvw = vert_uvw;\n"
-                                  "    fs_col = vert_col;\n"
-                                  "    fs_xyz = vert_xyz;\n"
-                                  "    fs_rect = vert_rect;\n"
-                                  "    fs_rounding = rounding;\n"
-                                  "    fs_softness = softness;\n"
-                                  "    fs_thickness = thickness;\n"
-                                  "}"
-                                  );
-
-jd_String fs_string = jd_StrConst("#version 330\n"
-                                  "in vec3 fs_xyz;\n"
-                                  "in vec3 fs_uvw;\n"
-                                  "in vec4 fs_col;\n"
-                                  "in vec4 fs_rect;\n"
-                                  "in float fs_rounding;\n"
-                                  "in float fs_softness;\n"
-                                  "in float fs_thickness;\n"
-                                  "\n"
-                                  "out vec4 out_col; \n"
-                                  "uniform sampler2DArray tex;\n"
-                                  "\n"
-                                  "// Implementation lifted from Ryan Fleury's UI tutorial\n"
-                                  "float RoundingSDF(vec2 sample_pos, vec2 rect_center, vec2 rect_half_size, float r) {\n"
-                                  "    vec2 d2 = (abs(rect_center - sample_pos) - rect_half_size + vec2(r, r));\n"
-                                  "    return min(max(d2.x, d2.y), 0.0) + length(max(d2, 0.0)) - r;\n"
-                                  "}\n"
-                                  "\n"
-                                  "void main() {\n"
-                                  "    vec4 color = texture(tex, fs_uvw);\n"
-                                  "    \n"
-                                  "    float softness = fs_softness;\n"
-                                  "    if (fs_rounding != 0 && fs_softness == 0) {\n"
-                                  "       softness = 1.0;\n"
-                                  "    }\n"
-                                  "    vec2 softness_padding = vec2(max(0, (softness * 2 - 1)), max(0, (softness * 2 - 1)));\n"
-                                  "    \n"
-                                  "    vec2 p0 = vec2(fs_rect.x, fs_rect.y);\n"
-                                  "    vec2 p1 = vec2(fs_rect.z, fs_rect.w);\n"
-                                  "    \n"
-                                  "    vec2 rect_center = vec2(p1 + p0) / 2;\n"
-                                  "    vec2 rect_half_size = vec2(p1 - p0) / 2;\n"
-                                  "    \n"
-                                  "    float dist = RoundingSDF(fs_xyz.xy, rect_center, rect_half_size - softness_padding, fs_rounding);\n"
-                                  "    \n"
-                                  "    float border_factor = 1.0f;\n"
-                                  "    \n"
-                                  "    if (fs_thickness > 0) {\n"
-                                  "        vec2 interior_half_size = rect_half_size - vec2(fs_thickness);\n"
-                                  "        \n"
-                                  "        float interior_radius_reduce = min(interior_half_size.x / rect_half_size.x,\n"
-                                  "                                           interior_half_size.y / rect_half_size.y);\n"
-                                  "        float interior_corner_radius = (fs_rounding * interior_radius_reduce * interior_radius_reduce);\n"
-                                  "        \n"
-                                  "        float inside_d = RoundingSDF(fs_xyz.xy, rect_center, interior_half_size - softness_padding, interior_corner_radius);\n"
-                                  "        \n"
-                                  "        float inside_f = smoothstep(0, 2 * softness, inside_d);\n"
-                                  "        border_factor = inside_f;\n"
-                                  "    }\n"
-                                  "    \n"
-                                  "    // map distance => a blend factor\n"
-                                  "    float sdf_factor = 1.0f - smoothstep(0, 2 * softness, dist);\n"
-                                  "    \n"
-                                  "    out_col = fs_col * color * sdf_factor * border_factor;\n"
-                                  "}"
-                                  );
-
-
 jd_ForceInline jd_Renderer* jd_RendererGet() {
     return jd_global_renderer;
 }
+
+static jd_ReadOnly jd_String vs_string = jd_StrConst("#version 330\n"
+                                                     "layout (location = 0) in vec3 vert_xyz;\n"
+                                                     "layout (location = 1) in vec3 vert_uvw;\n"
+                                                     "layout (location = 2) in vec4 vert_col;\n"
+                                                     "layout (location = 3) in vec4 vert_rect;\n"
+                                                     "layout (location = 4) in float rounding;\n"
+                                                     "layout (location = 5) in float softness;\n"
+                                                     "layout (location = 6) in float thickness;\n"
+                                                     "\n"
+                                                     "out vec3 fs_xyz;\n"
+                                                     "out vec3 fs_uvw;\n"
+                                                     "out vec4 fs_col;\n"
+                                                     "out vec4 fs_rect;\n"
+                                                     "out float fs_rounding;\n"
+                                                     "out float fs_softness;\n"
+                                                     "out float fs_thickness;\n"
+                                                     "\n"
+                                                     "uniform vec2 screen_conv;\n"
+                                                     "\n"
+                                                     "void main(){\n"
+                                                     "    gl_Position.x = (vert_xyz.x * screen_conv.x) - 1;\n"
+                                                     "    gl_Position.y = 1 - (vert_xyz.y * screen_conv.y);\n"
+                                                     "    gl_Position.z = vert_xyz.z;\n"
+                                                     "    gl_Position.w = 1;\n"
+                                                     "    fs_uvw = vert_uvw;\n"
+                                                     "    fs_col = vert_col;\n"
+                                                     "    fs_xyz = vert_xyz;\n"
+                                                     "    fs_rect = vert_rect;\n"
+                                                     "    fs_rounding = rounding;\n"
+                                                     "    fs_softness = softness;\n"
+                                                     "    fs_thickness = thickness;\n"
+                                                     "}"
+                                                     );
+
+static jd_ReadOnly jd_String fs_string = jd_StrConst("#version 330\n"
+                                                     "in vec3 fs_xyz;\n"
+                                                     "in vec3 fs_uvw;\n"
+                                                     "in vec4 fs_col;\n"
+                                                     "in vec4 fs_rect;\n"
+                                                     "in float fs_rounding;\n"
+                                                     "in float fs_softness;\n"
+                                                     "in float fs_thickness;\n"
+                                                     "\n"
+                                                     "out vec4 out_col; \n"
+                                                     "uniform sampler2DArray tex;\n"
+                                                     "\n"
+                                                     "// Implementation lifted from Ryan Fleury's UI tutorial\n"
+                                                     "float RoundingSDF(vec2 sample_pos, vec2 rect_center, vec2 rect_half_size, float r) {\n"
+                                                     "    vec2 d2 = (abs(rect_center - sample_pos) - rect_half_size + vec2(r, r));\n"
+                                                     "    return min(max(d2.x, d2.y), 0.0) + length(max(d2, 0.0)) - r;\n"
+                                                     "}\n"
+                                                     "\n"
+                                                     "void main() {\n"
+                                                     "    vec4 color = texture(tex, fs_uvw);\n"
+                                                     "    \n"
+                                                     "    float softness = fs_softness;\n"
+                                                     "    if (fs_rounding != 0 && fs_softness == 0) {\n"
+                                                     "       softness = 1.0;\n"
+                                                     "    }\n"
+                                                     "    vec2 softness_padding = vec2(max(0, (softness * 2 - 1)), max(0, (softness * 2 - 1)));\n"
+                                                     "    \n"
+                                                     "    vec2 p0 = vec2(fs_rect.x, fs_rect.y);\n"
+                                                     "    vec2 p1 = vec2(fs_rect.z, fs_rect.w);\n"
+                                                     "    \n"
+                                                     "    vec2 rect_center = vec2(p1 + p0) / 2;\n"
+                                                     "    vec2 rect_half_size = vec2(p1 - p0) / 2;\n"
+                                                     "    \n"
+                                                     "    float dist = RoundingSDF(fs_xyz.xy, rect_center, rect_half_size - softness_padding, fs_rounding);\n"
+                                                     "    \n"
+                                                     "    float border_factor = 1.0f;\n"
+                                                     "    \n"
+                                                     "    if (fs_thickness > 0) {\n"
+                                                     "        vec2 interior_half_size = rect_half_size - vec2(fs_thickness);\n"
+                                                     "        \n"
+                                                     "        float interior_radius_reduce = min(interior_half_size.x / rect_half_size.x,\n"
+                                                     "                                           interior_half_size.y / rect_half_size.y);\n"
+                                                     "        float interior_corner_radius = (fs_rounding * interior_radius_reduce);\n"
+                                                     "        \n"
+                                                     "        float inside_d = RoundingSDF(fs_xyz.xy, rect_center, interior_half_size - softness_padding, interior_corner_radius);\n"
+                                                     "        \n"
+                                                     "        float inside_f = smoothstep(0, 2 * softness, inside_d);\n"
+                                                     "        border_factor = inside_f;\n"
+                                                     "    }\n"
+                                                     "    \n"
+                                                     "    // map distance => a blend factor\n"
+                                                     "    float sdf_factor = 1.0f - smoothstep(0, 2 * softness, dist);\n"
+                                                     "    \n"
+                                                     "    out_col = fs_col * color * sdf_factor * border_factor;\n"
+                                                     "}"
+                                                     );
+
+
 
 void jd_ShaderCreate(jd_Renderer* renderer) {
     u32 id = 0;
@@ -281,7 +281,7 @@ jd_2DTexture* jd_TexturePoolAddTexture(jd_V2U size, u32 depth, jd_2DTextureMode 
     tex->res = size;
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, tex->gl_index);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    //glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, size.x, size.y, depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
     
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -631,7 +631,7 @@ jd_V2F jd_CalcStringBoxMax(jd_String font_id, jd_V2F starting_pos, jd_UTFDecoded
     
     f32 dpi_scaling = ((f32)jd_WindowGetDPI(renderer->current_window) / (f32)font->faces[0].dpi);
     
-    jd_V2F window_bb = renderer->current_window->size;
+    jd_V2F window_bb = (jd_V2F){renderer->current_window->size.x, renderer->current_window->size.y};
     
     f32 line_adv = font->faces[0].line_adv;
     
@@ -724,8 +724,6 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
     b8 wrap = (wrap_width > 0.0f);
     
     if (!wrap) {
-        f32 highest_asc = 0;
-        f32 lowest_desc = 0;
         for (u64 i = 0; i < utf32_string.count; i++) {
             if (utf32_string.utf32[i] == 0x0a) {
                 size.y += fallback->face->line_adv * dpi_scaling;
@@ -747,8 +745,7 @@ jd_V2F jd_CalcStringSize(jd_String font_id, jd_UTFDecodedString utf32_string, f3
             }
             
             size.x += g->h_advance * dpi_scaling;
-            lowest_desc = jd_Min(g->descender, lowest_desc);
-            size.y = jd_Max(size.y, (g->face->ascent + g->face->descent - lowest_desc) * dpi_scaling);
+            size.y = jd_Max(size.y, (g->face->ascent + g->face->descent) * dpi_scaling);
         }
     }  else {
         for (u64 i = 0; i < utf32_string.count; i++) {
@@ -1314,8 +1311,8 @@ void jd_RendererInit() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+    //glEnable(GL_DEPTH_TEST);
+    //glDepthFunc(GL_LEQUAL);
     
     glBindVertexArray(objects->vao);
     glBindBuffer(GL_ARRAY_BUFFER, objects->vbo);
@@ -1361,12 +1358,14 @@ void jd_RendererSetDPIScale(jd_Renderer* renderer, f32 scale) {
     if (scale != renderer->dpi_scaling) font_refresh = true;
 }
 
+
 void jd_RendererBegin(jd_V2F render_size) {
     jd_RendererGet()->render_size = render_size;
     glViewport(0, 0, render_size.w, render_size.h);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 }
+
 
 void jd_RendererDraw() {
     jd_Renderer* renderer = jd_RendererGet();
@@ -1402,7 +1401,7 @@ void jd_RendererDraw() {
 #endif
     
     jd_DArray* vertices = renderer->vertices;
-    
+    glBufferSubData(GL_ARRAY_BUFFER, 0, vertices->count * sizeof(jd_GLVertex), vertices->view.mem);
     jd_DrawGroup* dg = renderer->draw_group_chain_head;
     jd_DrawGroup* last_dg = 0;
     jd_ForDLLForward(dg, dg != 0) {
@@ -1416,9 +1415,9 @@ void jd_RendererDraw() {
         } else {
             size = vertices->count - dg->index;
         }
-        glBufferSubData(GL_ARRAY_BUFFER, 0, size * sizeof(jd_GLVertex), vertices->view.mem + (dg->index * sizeof(jd_GLVertex)));
+        
         glBindTexture(GL_TEXTURE_2D_ARRAY, dg->tex->gl_index);
-        glDrawArrays(GL_TRIANGLES, 0, size);
+        glDrawArrays(GL_TRIANGLES, dg->index, size);
         last_dg = dg;
     }
     
@@ -1428,3 +1427,5 @@ void jd_RendererDraw() {
     
     jd_ArenaPopTo(renderer->frame_arena, 0);
 }
+
+#include "jd_renderer2.c"

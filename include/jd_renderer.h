@@ -15,11 +15,6 @@
 
 typedef struct jd_Renderer jd_Renderer;
 
-typedef struct jd_Rectangle {
-    jd_V2F min;
-    jd_V2F max;
-} jd_Rectangle;
-
 typedef struct jd_TypefaceUnicodeRange {
     u32 begin;
     u32 end;
@@ -184,6 +179,9 @@ jd_ExportFn void jd_FontAddTypefaceFromMemory(jd_String font_id, jd_File file, j
 jd_ExportFn f32  jd_FontGetLineAdvForCodepoint(jd_String font_id, u32 codepoint);
 jd_ExportFn f32  jd_FontGetLineHeightForCodepoint(jd_String font_id, u32 codepoint);
 jd_ExportFn jd_Font* jd_FontGetByID(jd_String font_id);
+
+#include "jd_renderer2.h"
+
 #ifdef JD_IMPLEMENTATION
 #include "jd_renderer.c"
 #endif

@@ -86,7 +86,6 @@ typedef struct jd_DataBank {
 } jd_DataBank;
 
 typedef struct jd_DataBankConfig {
-    jd_Arena* arena;
     jd_String name;
     jd_DataType disabled_types; // |= types to this flag to disable them
     u64 total_memory_cap;

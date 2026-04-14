@@ -55,7 +55,7 @@ typedef enum jd_UIBoxFlags {
     jd_UIBoxFlags_ScrollY              = 1 << 8,
     jd_UIBoxFlags_DragandDrop          = 1 << 9,
     jd_UIBoxFlags_Multiline            = 1 << 10,
-    jd_UIBoxFlags_InvisibleBG            = 1 << 11,
+    jd_UIBoxFlags_InvisibleBG          = 1 << 11,
     jd_UIBoxFlags_NoClip               = 1 << 12
 } jd_UIBoxFlags;
 
@@ -168,7 +168,7 @@ typedef struct jd_UIBoxRec {
 } jd_UIBoxRec;
 
 typedef struct jd_UIViewport {
-    jd_V2F size;
+    jd_V2I size;
     jd_V2F minimum_size;
     
     jd_UIBoxRec* root;
@@ -296,7 +296,7 @@ jd_ExportFn jd_UIResult jd_UISliderF32(jd_String string_id, jd_UIShape shape, jd
 jd_ExportFn jd_UIResult jd_UISliderU64(jd_String string_id, jd_UIShape shape, jd_UIShape shape_button, jd_UIAxis axis, u64* v, u64 min, u64 max);
 jd_ExportFn jd_UIResult jd_UILabel(jd_String label);
 jd_ExportFn jd_UIResult jd_UILabelEx(jd_String label, jd_UIShape shape, jd_UIColors colors, jd_V2F alignment, jd_UIBoxFlags flags);
-jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label, jd_UIBoxFlags flags);
+jd_ExportFn jd_UIResult jd_UILabelButton(jd_String label, jd_V2F padding, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIListButton(jd_String label, jd_V2F alignment, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UIFixedSizeButton(jd_String label, jd_V2F size, jd_V2F label_alignment);
 jd_ExportFn jd_UIResult jd_UIRowGrowBegin(jd_String string_id, jd_V2F padding, f32 gap, jd_UIBoxFlags flags);
