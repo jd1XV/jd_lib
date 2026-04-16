@@ -320,8 +320,6 @@ void jd_TextureCacheCopyTexture(jd_CachedTexture* t, jd_CachedTextureSlot* slot,
     jd_TextureCache* cache = t->cache;
     jd_ScratchArena s = jd_ScratchArenaCreate(cache->arena);
     
-    fit = true; // TODO: Test code, remove
-    
     u8* transfer_bitmap = 0;
     
     if (fit) {
@@ -345,6 +343,9 @@ void jd_TextureCacheCopyTexture(jd_CachedTexture* t, jd_CachedTextureSlot* slot,
         u8* new_bitmap = jd_ArenaAlloc(s.arena, 4 * (t->dest_size.x * t->dest_size.y));
         stbir_resize_uint8_linear(bitmap, width, height, width * 4, new_bitmap, t->dest_size.x, t->dest_size.y, t->dest_size.x * 4, STBIR_RGBA_PM);
         transfer_bitmap = new_bitmap;
+    } else {
+        t->dest_size.y = jd_Max(cache->cell_height, t->dest_size.y);
+        t->dest_size.x = jd_Max(cache->cell_width,  t->dest_size.x);
     }
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, cache->gl_index);
