@@ -36,6 +36,10 @@ u64 jd_DiskGetFileLastMod(jd_String path) {
     return u.QuadPart;
 }
 
+jd_String jd_DiskPathGetExtension(jd_String path) {
+    return jd_StringGetPostfix(path, jd_StrLit("."));
+}
+
 //jd_StringList jd_DiskDirectoryListFiles(jd_String path, jd_String extension, b32 recursive);
 
 jd_File jd_DiskFileReadFromPath(jd_Arena* arena, jd_String path, b32 null_terminate) {

@@ -197,6 +197,13 @@ typedef struct jd_u128 {
     };
 } jd_u128;
 
+typedef struct jd_Bitmap {
+    u64 bytes_per_pixel;
+    u32 width;
+    u32 height;
+    u8* bitmap;
+} jd_Bitmap;
+
 #define jd_u128_EQ(a, b) (a.lo == b.lo && a.hi == b.hi)
 
 #pragma section("jd_readonlysec", read)

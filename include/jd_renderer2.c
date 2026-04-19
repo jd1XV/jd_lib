@@ -5,7 +5,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "dep/stb/stb_image_write.h"
 
-static jd_ReadOnly jd_String jd_internal_vs_string = jd_StrConst("#version 330\n"
+static jd_ReadOnly jd_String jd_internal_vs_string = jd_StrConst("#version 460\n"
                                                                  "layout (location = 0) in vec3 vert_xyz;\n"
                                                                  "layout (location = 1) in vec3 vert_uvw;\n"
                                                                  "layout (location = 2) in vec4 vert_col;\n"
@@ -39,7 +39,7 @@ static jd_ReadOnly jd_String jd_internal_vs_string = jd_StrConst("#version 330\n
                                                                  "}"
                                                                  );
 
-static jd_ReadOnly jd_String jd_internal_fs_string = jd_StrConst("#version 330\n"
+static jd_ReadOnly jd_String jd_internal_fs_string = jd_StrConst("#version 460\n"
                                                                  "in vec3 fs_xyz;\n"
                                                                  "in vec3 fs_uvw;\n"
                                                                  "in vec4 fs_col;\n"
@@ -97,7 +97,7 @@ static jd_ReadOnly jd_String jd_internal_fs_string = jd_StrConst("#version 330\n
                                                                  );
 
 typedef struct jd_CachedTexture {
-    u64 key;
+    u32 key;
     jd_V2I source_size;
     jd_V2I dest_size;
     
@@ -281,7 +281,7 @@ jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u
     glGenTextures(1, &cache->gl_index);
     glBindTexture(GL_TEXTURE_2D_ARRAY, cache->gl_index);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, width, height, depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGBA8, width, height, depth);
     
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -305,15 +305,8 @@ static void jd_CachedTextureAlphaToRGBA(u8* src, u64 src_size, u8* dst) {
     }
 }
 
-u64 jd_TextureKey(jd_String s) {
-    return (u64)jd_HashStrToU32(s, _jd_renderer_default_seed);
-}
-
-u64 jd_GlyphTextureKey(u16 dpi, u16 point_size, u32 codepoint) {
-    u64 dpi64 = dpi;
-    u64 ps64 = point_size;
-    u64 key = (dpi64 << 48) + (ps64 << 32) + codepoint;
-    return key;
+u32 jd_TextureKey(jd_String s) {
+    return jd_HashStrToU32(s, _jd_renderer_default_seed);
 }
 
 void jd_TextureCacheCopyTexture(jd_CachedTexture* t, jd_CachedTextureSlot* slot, u8* bitmap, b32 monochrome, u32 width, u32 height, b32 fit) {
@@ -321,6 +314,14 @@ void jd_TextureCacheCopyTexture(jd_CachedTexture* t, jd_CachedTextureSlot* slot,
     jd_ScratchArena s = jd_ScratchArenaCreate(cache->arena);
     
     u8* transfer_bitmap = 0;
+    
+    if (monochrome) {
+        u8* swizzle_bitmap = jd_ArenaAlloc(s.arena, width * height * 4);
+        jd_CachedTextureAlphaToRGBA(bitmap, width * height, swizzle_bitmap);
+        bitmap = swizzle_bitmap;
+    }
+    
+    jd_V2F transfer_size = {0};
     
     if (fit) {
         b32 portrait = (width < height);
@@ -334,29 +335,24 @@ void jd_TextureCacheCopyTexture(jd_CachedTexture* t, jd_CachedTextureSlot* slot,
             t->dest_size.y = height * scale_factor;
         }
         
-        if (monochrome) {
-            u8* swizzle_bitmap = jd_ArenaAlloc(s.arena, width * height * 4);
-            jd_CachedTextureAlphaToRGBA(bitmap, width * height, swizzle_bitmap);
-            bitmap = swizzle_bitmap;
-        }
-        
         u8* new_bitmap = jd_ArenaAlloc(s.arena, 4 * (t->dest_size.x * t->dest_size.y));
         stbir_resize_uint8_linear(bitmap, width, height, width * 4, new_bitmap, t->dest_size.x, t->dest_size.y, t->dest_size.x * 4, STBIR_RGBA_PM);
         transfer_bitmap = new_bitmap;
     } else {
-        t->dest_size.y = jd_Max(cache->cell_height, t->dest_size.y);
-        t->dest_size.x = jd_Max(cache->cell_width,  t->dest_size.x);
+        transfer_bitmap = bitmap;
+        t->dest_size.y = jd_Min(height, cache->cell_height);
+        t->dest_size.x = jd_Min(width, cache->cell_width);
     }
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, cache->gl_index);
     glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, slot->offset.x, slot->offset.y, slot->layer, t->dest_size.x, t->dest_size.y, 1, GL_RGBA, GL_UNSIGNED_BYTE, transfer_bitmap);
-    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    //glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     
     jd_ScratchArenaRelease(s);
 }
 
-b32 jd_TextureCacheCheck(jd_TextureCache* cache, u64 key) {
+b32 jd_TextureCacheCheck(jd_TextureCache* cache, u32 key, jd_Texture* texture) {
     jd_CachedTexture* t = &cache->hash_table[key % cache->hash_table_count];
     
     if (t->key == 0) {
@@ -371,10 +367,30 @@ b32 jd_TextureCacheCheck(jd_TextureCache* cache, u64 key) {
         return false;
     }
     
-    return true;
+    jd_CachedTextureSlot* slot = t->gpu_slot;
+    
+    if (slot) {
+        jd_Texture return_tex = {
+            .index = cache->gl_index
+        };
+        
+        return_tex.uvw_max.u = (f32)(slot->offset.x + t->dest_size.x) / (f32)cache->width;
+        return_tex.uvw_max.v = (f32)(slot->offset.y + t->dest_size.y) / (f32)cache->height;
+        return_tex.uvw_max.w = slot->layer;
+        
+        return_tex.uvw_min.u = (slot->offset.x > 0) ? ((f32)slot->offset.x / (f32)cache->width) : 0;
+        return_tex.uvw_min.v = (slot->offset.y > 0) ? ((f32)slot->offset.y / (f32)cache->width) : 0;
+        return_tex.uvw_min.w = slot->layer;
+        
+        *texture = return_tex;
+        return true;
+    } else {
+        return false;
+    }
+    
 }
 
-jd_Texture jd_TextureCacheInsert(jd_TextureCache* cache, b8 perm, u64 key, u8* bitmap, b32 monochrome, u32 width, u32 height, b32 fit) {
+jd_Texture jd_TextureCacheInsert(jd_TextureCache* cache, b8 perm, u32 key, u8* bitmap, b32 monochrome, u32 width, u32 height, b32 fit) {
     jd_CachedTexture* t = &cache->hash_table[key % cache->hash_table_count];
     
     if (t->key == 0) {
@@ -435,8 +451,8 @@ jd_Texture jd_TextureCacheInsert(jd_TextureCache* cache, b8 perm, u64 key, u8* b
     return_tex.uvw_max.v = (f32)(slot->offset.y + t->dest_size.y) / (f32)cache->height;
     return_tex.uvw_max.w = slot->layer;
     
-    return_tex.uvw_min.u = (slot->offset.x > 0) ? (slot->offset.x / cache->width) : 0;
-    return_tex.uvw_min.v = (slot->offset.x > 0) ? (slot->offset.y / cache->width) : 0;
+    return_tex.uvw_min.u = (slot->offset.x > 0) ? ((f32)slot->offset.x / (f32)cache->width) : 0;
+    return_tex.uvw_min.v = (slot->offset.y > 0) ? ((f32)slot->offset.y / (f32)cache->width) : 0;
     return_tex.uvw_min.w = slot->layer;
     
     return return_tex;
@@ -503,10 +519,16 @@ void jd_2DRendererInit() {
     
     glBufferData(GL_ARRAY_BUFFER, KILOBYTES(512) * sizeof(jd_GL2DVertex), NULL, GL_DYNAMIC_DRAW);
     
-    r->core_texture_cache = jd_TextureCacheCreate(arena, 1024, 1024, 16, 32, 64);
-    u8* bitmap = jd_ArenaAlloc(r->frame_arena, sizeof(u32) * (128 * 128));
-    jd_MemSet(bitmap, 0xFF, sizeof(u32) * (128 * 128));
-    r->rectangle_texture = jd_TextureCacheInsert(r->core_texture_cache, true, jd_TextureKey(jd_StrLit("jd_internal_rectangle_texture")), bitmap, false, 128, 128, true);
+    u64 core_texture_cache_w = 2048;
+    u64 core_texture_cache_h = 2048;
+    u64 core_texture_cache_d = 4;
+    u64 core_texture_cache_cw = 128;
+    u64 core_texture_cache_ch = 256;
+    
+    r->core_texture_cache = jd_TextureCacheCreate(arena, core_texture_cache_w, core_texture_cache_h, core_texture_cache_d, core_texture_cache_cw, core_texture_cache_ch);
+    u8* bitmap = jd_ArenaAlloc(r->frame_arena, sizeof(u32) * (core_texture_cache_cw * core_texture_cache_ch));
+    jd_MemSet(bitmap, 0xFF, sizeof(u32) * (core_texture_cache_cw * core_texture_cache_ch));
+    r->rectangle_texture = jd_TextureCacheInsert(r->core_texture_cache, true, jd_TextureKey(jd_StrLit("jd_internal_rectangle_texture")), bitmap, false, core_texture_cache_cw, core_texture_cache_ch, true);
 }
 
 void jd_2DRendererBindWindow(jd_Window* window) {
@@ -665,6 +687,109 @@ void jd_2DTextureRect(jd_Texture t, jd_V2F position, jd_V2F size, f32 corner_rad
     jd_DArrayPushBack(vertices, &bottom_left);
     jd_DArrayPushBack(vertices, &top_left);
     jd_DArrayPushBack(vertices, &top_right);
+}
+
+jd_ForceInline u32 jd_GlyphTextureID(jd_Font2* font, u16 point_size, u32 codepoint) {
+    u32 seed_hash = jd_HashU32toU32(point_size, _jd_renderer_default_seed);
+    u32 to_hash = (codepoint << 11) + font->handle;
+    u32 key = jd_HashU32toU32(to_hash + 1, seed_hash);
+    return key;
+}
+
+jd_Texture jd_GlyphGetTexture(jd_Font2* font, u32 codepoint, u16 point_size) {
+    jd_Texture t = {0};
+    
+    b32 exists = jd_TextureCacheCheck(jd_global_2d_renderer.core_texture_cache, jd_GlyphTextureID(font, point_size, codepoint), &t);
+    if (!exists) {
+        jd_Bitmap bitmap = jd_FontGetGlyphBitmap(jd_global_2d_renderer.frame_arena, font, codepoint, point_size);
+        if (!bitmap.bitmap) {
+            codepoint = 0;
+            b32 fallback_exists = jd_TextureCacheCheck(jd_global_2d_renderer.core_texture_cache, jd_GlyphTextureID(font, point_size, codepoint), &t);
+            if (!fallback_exists) {
+                bitmap = jd_FontGetGlyphBitmap(jd_global_2d_renderer.frame_arena, font, codepoint, point_size);
+                t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, false);
+            }
+        } else {
+            t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, false);
+        }
+    }
+    
+    return t;
+}
+
+void jd_2DGlyphRect(jd_Font2* font, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32* out_advance) {
+    f32 x = position.x;
+    f32 y = position.y;
+    f32 z = 0;
+    
+    jd_Texture t = jd_GlyphGetTexture(font, codepoint, point_size);
+    
+    jd_GlyphMetrics* g_metrics = jd_FontGetGlyphMetrics(font, codepoint);
+    
+    u32 height = (font->ascent + font->descent) * point_size;
+    u32 width  = (g_metrics->h_advance * point_size);
+    
+    jd_DGQueue(t);
+    
+    jd_V4F rect = {
+        .x0 = position.x,
+        .y0 = position.y,
+        .x1 = position.x + width,
+        .y1 = position.y + height
+    };
+    
+    jd_GL2DVertex top_right = {
+        .pos = {rect.x1, rect.y1, z},
+        .tx = t.uvw_max,
+        .color = color,
+        .rect = rect,
+    };
+    
+    jd_GL2DVertex bottom_right = {
+        .pos = {rect.x1, rect.y0, z},
+        .tx = {t.uvw_max.u, t.uvw_min.v, t.uvw_max.w},
+        .color = color,
+        .rect = rect,
+    };
+    
+    jd_GL2DVertex bottom_left = {
+        .pos = {rect.x0, rect.y0, z},
+        .tx = t.uvw_min,
+        .color = color,
+        .rect = rect,
+    };
+    
+    jd_GL2DVertex top_left = {
+        .pos = {rect.x0, rect.y1, z},
+        .tx = {t.uvw_min.u, t.uvw_max.v, t.uvw_max.w},
+        .color = color,
+        .rect = rect,
+    };
+    
+    jd_DArray* vertices = jd_global_2d_renderer.vertices;
+    jd_DArrayPushBack(vertices, &top_right);
+    jd_DArrayPushBack(vertices, &bottom_right);
+    jd_DArrayPushBack(vertices, &bottom_left);
+    jd_DArrayPushBack(vertices, &bottom_left);
+    jd_DArrayPushBack(vertices, &top_left);
+    jd_DArrayPushBack(vertices, &top_right);
+    
+    jd_2DColorRect(position, jd_V2F(width, height), (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0, 0, 1.0f, clip);
+    
+    *out_advance += width;
+}
+
+void jd_2DString(jd_Font2* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap) {
+    jd_V2F p = position;
+    jd_V2F ext = jd_FontGetTextLayoutExtent(font, point_size, string, wrap);
+    for (u64 i = 0; i < string.count;) {
+        u32 codepoint = jd_Codepoint8to32(string, &i);
+        if (codepoint)
+            jd_2DGlyphRect(font, codepoint, point_size, p, color, clip, &p.x);
+    }
+    
+    position.y += (font->ascent * point_size) - (font->layout_line_height * point_size);
+    jd_2DColorRect(position, ext, jd_V4F(1.0f, 0.6f, .8f, 1.0f), 0, 0, 2.0f, (jd_V4F){0});
 }
 
 void jd_2DRendererDraw() {

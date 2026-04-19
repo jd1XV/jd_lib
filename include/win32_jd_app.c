@@ -199,15 +199,15 @@ void jd_AppUpdatePlatformWindow(jd_Window* window) {
     jd_WindowMakeCurrent(window);
     jd_2DRendererBindWindow(window);
     jd_2DRendererBegin(window);
-#if 0
+    
     jd_RendererGet()->current_window = window;
     jd_RendererBegin((jd_V2F){window->size.x, window->size.y});
-#endif
+    
     window->func(window);
     
-#if 0    
+    
     jd_RendererDraw();
-#endif
+    
     
     jd_2DRendererDraw();
     jd_ArenaPopTo(jd_RendererGet()->frame_arena, 0);
@@ -498,7 +498,7 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     
     const i32 ctx_attribs[] = {
         WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 6,
         0
     };
     
@@ -607,7 +607,7 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     }
     
     wglMakeCurrent(window->device_context, config->app->ogl_context);
-    wglSwapIntervalEXT(1);
+    wglSwapIntervalEXT(0);
     ShowWindow(window->handle, SW_SHOW);
     
     if (!config->app->renderer_initialized) {

@@ -77,7 +77,16 @@ jd_Font2 jd_FontAdd(jd_String path) {
         return font;
     }
     
-    IDWriteFactory_CreateFontFace(jd_internal_font_state->dwrite_factory, DWRITE_FONT_FACE_TYPE_TRUETYPE, 1, &objects->file, 0, DWRITE_FONT_SIMULATIONS_NONE, &objects->face);
+    jd_String extension = jd_DiskPathGetExtension(path);
+    DWRITE_FONT_FACE_TYPE type = DWRITE_FONT_FACE_TYPE_TRUETYPE;
+    if (jd_StringMatch(extension, jd_StrLit("ttc"))){
+        type = DWRITE_FONT_FACE_TYPE_TRUETYPE_COLLECTION;
+    }
+    else if (jd_StringMatch(extension, jd_StrLit("fon"))) {
+        type = DWRITE_FONT_FACE_TYPE_BITMAP;
+    }
+    
+    IDWriteFactory_CreateFontFace(jd_internal_font_state->dwrite_factory, type, 1, &objects->file, 0, DWRITE_FONT_SIMULATIONS_NONE, &objects->face);
     if (!objects->face) {
         jd_LogError("DirectWrite: Could not create font face", jd_Error_BadInput, jd_Error_Common);
         return font;
@@ -156,51 +165,172 @@ HRESULT STDMETHODCALLTYPE QueryInterfaceStump(IDWriteTextAnalysisSource* this, R
     return S_OK;
 }
 
-u8* jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2 font, u32 codepoint, u32 size) {
-    if (!font.handle) {
+jd_ReadOnly static u32 _jd_fonts_default_seed = 104720809;
+
+jd_ForceInline u32 jd_GlyphMetricsID(jd_Font2* font, u32 codepoint) {
+    u32 to_hash = (codepoint << 11) + font->handle;
+    u32 key = jd_HashU32toU32(to_hash, _jd_fonts_default_seed);
+    return key;
+}
+
+void jd_Font_Internal_LoadGlyphMetricsForString(jd_Font2* font, jd_Arena* arena, jd_String32 string32) {
+    u16* glyph_indices = jd_ArenaAlloc(arena, sizeof(u32) * string32.count);
+    
+    jd_Font_Internal_DWriteObjects* objects = &jd_internal_font_state->per_handle_objects[font->handle - 1];
+    IDWriteFontFace_GetGlyphIndices(objects->face, string32.mem, string32.count, glyph_indices);
+    IDWriteFontFace* face = objects->face;
+    
+    DWRITE_FONT_METRICS face_metrics = {0};
+    IDWriteFontFace_GetMetrics(face, &face_metrics);
+    f32 per_em = (f32)face_metrics.designUnitsPerEm;
+    
+    f32 dpi_factor = (96.0f/72.0f);
+    
+    font->ascent = dpi_factor * ((f32)face_metrics.ascent / per_em);
+    font->descent = dpi_factor * ((f32)face_metrics.descent / per_em);
+    font->line_gap = dpi_factor * ((f32)face_metrics.lineGap / per_em);
+    font->line_adv = font->ascent + font->descent + font->line_gap;
+    font->layout_line_height = (f32)((u32)((dpi_factor * ((f32)face_metrics.capHeight / per_em)) + 0.5));
+    
+    for (u64 i = 0; i < string32.count; i++) {
+        b32 fallback_used = false;
+        jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, *(string32.mem + i));
+        IDWriteFontFace* face = objects->face;
+        IDWriteFont* fallback_font = 0;
+        if (metrics->codepoint == 0) {
+            metrics->font = font;
+            u16 gi = *(glyph_indices + i);
+            if (gi == 0) {
+                IDWriteTextAnalysisSourceVtbl table = {
+                    QueryInterfaceStump,
+                    DWriteStump,
+                    DWriteStump,
+                    jd_Internal_FontFallback_GetTextAtPosition,
+                    jd_Internal_FontFallback_GetTextBeforePosition, 
+                    jd_Internal_FontFallback_GetReadingDirection, 
+                    jd_Internal_FontFallback_GetLocaleName, 
+                    jd_Internal_FontFallback_GetNumberSubstitution
+                };
+                
+                FontFallBackWrapper wrapper = {
+                    .lpVtbl = &table,
+                    .codepoint = string32.mem[i]
+                };
+                
+                u32 mapped_length = 0;
+                f32 scale = 0;
+                HRESULT result = 0;
+                result = IDWriteFontFallback_MapCharacters(jd_internal_font_state->fallback, (IDWriteTextAnalysisSource*)&wrapper, 0, 1, 0, 0, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mapped_length, &fallback_font, &scale);
+                
+                if (!fallback_font) {
+                    continue;
+                }
+                
+                IDWriteFont_CreateFontFace(fallback_font, &face);
+                IDWriteFontFace_GetGlyphIndices(face, &string32.mem[i], 1, &gi);
+                
+                fallback_used = true;
+            }
+            
+            DWRITE_GLYPH_METRICS glyph_metrics = {0};
+            IDWriteFontFace_GetDesignGlyphMetrics(face, &gi, 1, &glyph_metrics, 0);
+            
+            metrics->h_advance = dpi_factor * ((f32)glyph_metrics.advanceWidth / per_em);
+            metrics->codepoint = string32.mem[i];
+            
+            if (fallback_used) {
+                IDWriteFont_Release(fallback_font);
+                IDWriteFontFace_Release(face);
+            }
+        }
+    }
+}
+
+jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String string, f32 wrap) {
+    if (!font || !font->handle) {
         jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
-        return 0;
     }
     
-    jd_Font_Internal_DWriteObjects* objects = &jd_internal_font_state->per_handle_objects[font.handle - 1];
-    if (!objects->face) {
-        return 0;
+    jd_V2F ext = {0, font->layout_line_height * point_size};
+    jd_V2U pen = {0, 0};
+    jd_ScratchArena s = jd_ScratchArenaCreate(jd_internal_font_state->arena);
+    jd_String32 string32 = jd_UTF8ToUTF32(s.arena, string);
+    jd_Font_Internal_LoadGlyphMetricsForString(font, s.arena, string32);
+    
+    for (u64 i = 0; i < string32.count; i++) {
+        u32 codepoint = *(string32.mem + i);
+        jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
+        if ((wrap > 0.0f) && pen.x + (metrics->h_advance * point_size) > wrap) {
+            ext.y += font->line_adv * point_size;
+            pen.x = 0;
+            pen.y += font->line_adv * point_size;
+        } else {
+            pen.x += (metrics->h_advance * point_size);
+        }
+        
+        ext.x = jd_Max(pen.x, ext.x);
     }
+    
+    return ext;
+}
+
+jd_V2F jd_FontGetTextGraphicalExtent(jd_Font2* font, jd_String string) {
+    if (!font || !font->handle) {
+        jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+}
+
+jd_GlyphMetrics* jd_FontGetGlyphMetrics(jd_Font2* font, u32 codepoint) {
+    u32 glyph_id = jd_GlyphMetricsID(font, codepoint);
+    jd_GlyphMetrics* metrics = &font->metrics_table[glyph_id % font->metrics_table_count];
+    if (metrics->codepoint == 0 && metrics->font == 0) {
+        return metrics;
+    }
+    
+    while ((metrics->codepoint != codepoint || metrics->font != font) && metrics->hash_chain != 0) {
+        metrics = metrics->hash_chain;
+    }
+    
+    if (metrics->codepoint != codepoint || metrics->font != font) {
+        metrics->hash_chain = jd_ArenaAlloc(jd_internal_font_state->arena, sizeof(*metrics));
+        metrics = metrics->hash_chain;
+    }
+    
+    return metrics;
+}
+
+jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, u32 size) {
+    jd_Bitmap zero_bitmap = {0};
+    
+    if (!font || !font->handle) {
+        jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    jd_Font_Internal_DWriteObjects* objects = &jd_internal_font_state->per_handle_objects[font->handle - 1];
     
     COLORREF bg_color = RGB(0, 0, 0);
     COLORREF fg_color = RGB(255, 255, 255);
-    
-    u32 height = 0;
-    u32 width  = 0;
-    
-    DWRITE_FONT_METRICS face_metrics = {0};
-    IDWriteFontFace_GetMetrics(objects->face, &face_metrics);
-    f32 per_em = (f32)face_metrics.designUnitsPerEm;
-    
-    i16 render_height = (96.0f/72.0f) * size * (face_metrics.ascent + face_metrics.descent + face_metrics.lineGap) / per_em;
-    render_height = (i16)(render_height + 0.5f + 1);
-    
-    IDWriteBitmapRenderTarget* target = 0;
-    IDWriteGdiInterop_CreateBitmapRenderTarget(jd_internal_font_state->gdi_interop, 0, 128, 128, &target);
-    IDWriteBitmapRenderTarget_SetPixelsPerDip(target, 1.0f);
-    
-    HDC dc = IDWriteBitmapRenderTarget_GetMemoryDC(target);
-    HGDIOBJ original = SelectObject(dc, GetStockObject(DC_PEN));
-    SetDCPenColor(dc, bg_color);
-    SelectObject(dc, GetStockObject(DC_BRUSH));
-    SetDCBrushColor(dc, bg_color);
-    Rectangle(dc, 0, 0, 128, 128);
-    SelectObject(dc, original);
     
     u16 glyph_index = 0;
     
     IDWriteFontFace_GetGlyphIndices(objects->face, &codepoint, 1, &glyph_index);
     IDWriteFontFace* face = objects->face;
+    IDWriteFontFace* main_face = face;
     IDWriteFont* fallback_font = 0;
     b32 fallback_used = false;
     
-    if (!glyph_index) {
-        IDWriteTextAnalysisSourceVtbl table = {QueryInterfaceStump,DWriteStump,DWriteStump,jd_Internal_FontFallback_GetTextAtPosition,jd_Internal_FontFallback_GetTextBeforePosition, jd_Internal_FontFallback_GetReadingDirection, jd_Internal_FontFallback_GetLocaleName, jd_Internal_FontFallback_GetNumberSubstitution};
+    if (!glyph_index && codepoint != 0) {
+        IDWriteTextAnalysisSourceVtbl table = {
+            QueryInterfaceStump,
+            DWriteStump,
+            DWriteStump,
+            jd_Internal_FontFallback_GetTextAtPosition,
+            jd_Internal_FontFallback_GetTextBeforePosition, 
+            jd_Internal_FontFallback_GetReadingDirection, 
+            jd_Internal_FontFallback_GetLocaleName, 
+            jd_Internal_FontFallback_GetNumberSubstitution
+        };
+        
         FontFallBackWrapper wrapper = {
             .lpVtbl = &table,
             .codepoint = codepoint
@@ -208,27 +338,74 @@ u8* jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2 font, u32 codepoint, u32 siz
         
         u32 mapped_length = 0;
         f32 scale = 0;
-        IDWriteFont* font = 0;
         HRESULT result = 0;
-        result = IDWriteFontFallback_MapCharacters(jd_internal_font_state->fallback, (IDWriteTextAnalysisSource*)&wrapper, 0, 1, 0, 0, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mapped_length, &font, &scale);
-        IDWriteFont_CreateFontFace(font, &face);
+        result = IDWriteFontFallback_MapCharacters(jd_internal_font_state->fallback, (IDWriteTextAnalysisSource*)&wrapper, 0, 1, 0, 0, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, &mapped_length, &fallback_font, &scale);
+        
+        if (!fallback_font) {
+            return zero_bitmap;
+        }
+        
+        IDWriteFont_CreateFontFace(fallback_font, &face);
         IDWriteFontFace_GetGlyphIndices(face, &codepoint, 1, &glyph_index);
         
         fallback_used = true;
     }
     
+    DWRITE_FONT_METRICS face_metrics = {0};
+    IDWriteFontFace_GetMetrics(face, &face_metrics);
+    f32 per_em = (f32)face_metrics.designUnitsPerEm;
+    
+    f32 dpi_factor = (96.0f/72.0f);
+    
+    if ((!fallback_used) || font->line_adv == 0) {
+        font->ascent = dpi_factor * ((f32)face_metrics.ascent / per_em);
+        font->descent = dpi_factor * ((f32)face_metrics.descent / per_em);
+        font->line_gap = dpi_factor * ((f32)face_metrics.lineGap / per_em);
+        font->line_adv = font->ascent + font->descent + font->line_gap;
+        font->layout_line_height = (f32)((u64)((dpi_factor * ((f32)face_metrics.capHeight / per_em)) + 0.5));
+    }
+    
+    DWRITE_GLYPH_METRICS glyph_metrics = {0};
+    IDWriteFontFace_GetDesignGlyphMetrics(face, &glyph_index, 1, &glyph_metrics, 0);
+    
+    jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
+    if (metrics->codepoint == 0) {
+        metrics->font = font;
+        metrics->h_advance = dpi_factor * glyph_metrics.advanceWidth / per_em;
+        metrics->codepoint = codepoint;
+    }
+    
+    i16 render_height = dpi_factor * size * (((f32)face_metrics.ascent + (f32)face_metrics.descent) / per_em);
+    render_height = (i16)(render_height + 0.5f);
+    i16 render_width = dpi_factor * size * glyph_metrics.advanceWidth / per_em;
+    
+    IDWriteBitmapRenderTarget* target = 0;
+    IDWriteGdiInterop_CreateBitmapRenderTarget(jd_internal_font_state->gdi_interop, 0, render_width, render_height, &target);
+    IDWriteBitmapRenderTarget_SetPixelsPerDip(target, 1.0f);
+    
+    HDC dc = IDWriteBitmapRenderTarget_GetMemoryDC(target);
+    HGDIOBJ original = SelectObject(dc, GetStockObject(DC_PEN));
+    SetDCPenColor(dc, bg_color);
+    SelectObject(dc, GetStockObject(DC_BRUSH));
+    SetDCBrushColor(dc, bg_color);
+    Rectangle(dc, 0, 0, render_width, render_height);
+    SelectObject(dc, original);
+    
     DWRITE_GLYPH_RUN glyph_run = {
         .fontFace = face,
-        .fontEmSize = size * (96.0f/72.0f),
+        .fontEmSize = size * dpi_factor,
         .glyphCount = 1,
         .glyphIndices = &glyph_index
     };
     
     RECT bb = {0};
     IDWriteRenderingParams* rendering_params = jd_internal_font_state->rendering_params;
-    HRESULT result = IDWriteBitmapRenderTarget_DrawGlyphRun(target, 0.0f, 64, DWRITE_MEASURING_MODE_NATURAL, &glyph_run, rendering_params, fg_color, &bb);
     
-    u8* return_bitmap = jd_ArenaAlloc(arena, sizeof(u32) * 128 * 128);
+    f32 descent = size * font->descent;
+    
+    HRESULT result = IDWriteBitmapRenderTarget_DrawGlyphRun(target, 0.0f, render_height - (descent), DWRITE_MEASURING_MODE_NATURAL, &glyph_run, rendering_params, fg_color, &bb);
+    
+    u8* return_bitmap = jd_ArenaAlloc(arena, sizeof(u32) * render_width * render_height);
     DIBSECTION dib = {0};
     {
         HBITMAP bitmap = (HBITMAP)GetCurrentObject(dc, OBJ_BITMAP);
@@ -237,7 +414,7 @@ u8* jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2 font, u32 codepoint, u32 siz
     
     u8* src = (u8*)dib.dsBm.bmBits;
     
-    for (u64 i = 0; i < (128 * 128); i++) {
+    for (u64 i = 0; i < (render_width * render_height); i++) {
         return_bitmap[i * 4] = 0xff;
         return_bitmap[1 + (i * 4)] = 0xff;
         return_bitmap[2 + (i * 4)] = 0xff;
@@ -249,7 +426,14 @@ u8* jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2 font, u32 codepoint, u32 siz
         IDWriteFontFace_Release(face);
     }
     
-    
     IDWriteBitmapRenderTarget_Release(target);
-    return return_bitmap;
+    
+    jd_Bitmap bmp = {
+        .bytes_per_pixel = 4,
+        .width = render_width,
+        .height = render_height,
+        .bitmap = return_bitmap
+    };
+    
+    return bmp;
 }

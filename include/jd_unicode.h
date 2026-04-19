@@ -8,6 +8,8 @@
 #include "jd_string.h"
 #endif
 
+// TODO: Consider merging with jd_string.h/.c
+
 typedef enum jd_UnicodeTF {
     jd_UnicodeTF_UTF8,
     jd_UnicodeTF_UTF16,
@@ -37,6 +39,7 @@ typedef struct jd_String16 {
     u64  count;
 } jd_String16;
 
+jd_ExportFn u32 jd_Codepoint8to32(jd_String string8, u64* index);
 jd_ExportFn jd_String16 jd_UTF8ToUTF16(jd_Arena* arena, jd_String string);
 jd_ExportFn jd_String32 jd_UTF8ToUTF32(jd_Arena* arena, jd_String string);
 jd_ExportFn jd_String   jd_UTF16toUTF8(jd_Arena* arena, jd_String16 string);

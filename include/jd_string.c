@@ -65,7 +65,7 @@ jd_String jd_StringGetPostfix(jd_String str, jd_String pattern) {
     for (u64 i = 0; i + pattern.count < str.count; i++) {
         if (jd_MemCompare(&str.mem[i], pattern.mem, pattern.count)) {
             s.mem = &str.mem[i + 1];
-            s.count = str.count - i;
+            s.count = str.count - (i + 1);
         }
     }
     

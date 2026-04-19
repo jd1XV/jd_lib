@@ -75,7 +75,7 @@ jd_ForceInline static void _jd_UTF8toUTF32(jd_UTFDecodedString* dec_str, jd_Stri
     }
 }
 
-static jd_ForceInline u32 jd_Codepoint8to32(jd_String string8, u64* index) {
+jd_ForceInline u32 jd_Codepoint8to32(jd_String string8, u64* index) {
     static const u8 length_table[] = {
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
@@ -166,13 +166,13 @@ jd_String16 jd_UTF8ToUTF16(jd_Arena* arena, jd_String string) {
     jd_String16 string16 = {0};
     if (!string.count) return string16;
     
-    u64 arena_pos = arena->pos;
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
     string16.mem = jd_ArenaAlloc(arena, sizeof(u16) * (string.count + 1));
     
     for (u64 i = 0; i < string.count;) {
         u32 codepoint = jd_Codepoint8to32(string, &i);
         if (!codepoint) {
-            return string16;
+            break;
         }
         
         if (codepoint > 0xFFFF) {
@@ -191,12 +191,26 @@ jd_String16 jd_UTF8ToUTF16(jd_Arena* arena, jd_String string) {
         }
     }
     
-    jd_ArenaPopTo(arena, arena_pos + (sizeof(u16) * (string16.count + 1)));
+    jd_ArenaPopTo(arena, s.pos + (sizeof(u16) * (string16.count)));
     return string16;
 }
 
 jd_String32 jd_UTF8ToUTF32(jd_Arena* arena, jd_String string) {
+    jd_String32 string32 = {0};
+    if (!string.count) return string32;
     
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+    string32.mem = jd_ArenaAlloc(arena, sizeof(u32) * string.count + 1);
+    
+    for (u64 i = 0; i < string.count;) {
+        u32 codepoint = jd_Codepoint8to32(string, &i);
+        if (!codepoint) break;
+        string32.mem[string32.count] = codepoint;
+        string32.count++;
+    }
+    
+    jd_ArenaPopTo(arena, s.pos + (sizeof(u32) * (string32.count)));
+    return string32;
 }
 
 jd_String   jd_UTF16toUTF8(jd_Arena* arena, jd_String16 string) {

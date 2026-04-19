@@ -57,6 +57,10 @@ jd_Arena* jd_ArenaCreate(u64 capacity, u64 commit_page_size) {
 }
 
 void* jd_ArenaAlloc(jd_Arena* arena, u64 size) {
+    if (!arena) {
+        jd_LogError("Arena has not been initialized. Arena should be returned by jd_ArenaCreate()", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
     void* result = 0;
     
     if (arena->pos + size > arena->cap) {
@@ -106,7 +110,7 @@ void jd_ArenaRelease(jd_Arena* arena) {
 
 jd_ScratchArena jd_ScratchArenaCreate(jd_Arena* arena) {
     if (!arena) {
-        jd_LogError("Cannot create scratch arena on null arena.", jd_Error_APIMisuse, jd_Error_Fatal);
+        jd_LogError("Arena has not been initialized. Arena should be returned by jd_ArenaCreate()", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     
     jd_ScratchArena scratch = {
