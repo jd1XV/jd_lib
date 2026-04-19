@@ -767,6 +767,13 @@ void jd_UI_Internal_FinalizeSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             b->scroll.val[axis] = b->scroll_max.val[axis];
         }
         
+#if 1        
+        b->rect.min.x = jd_F32RoundUp(b->rect.min.x);
+        b->rect.min.y = jd_F32RoundUp(b->rect.min.y);
+        b->rect.max.x = jd_F32RoundUp(b->rect.max.x);
+        b->rect.max.y = jd_F32RoundUp(b->rect.max.y);
+#endif
+        
         jd_TreeTraversePreorder(b);
     }
 } 

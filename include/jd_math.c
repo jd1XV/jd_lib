@@ -73,3 +73,7 @@ f32 jd_F32Abs(f32 x) {
         return ret;
     } else return x;
 }
+
+f32 jd_F32RoundUp(f32 x) {
+    return (f32)((u64)(x + 0.5));
+}

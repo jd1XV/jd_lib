@@ -15,6 +15,8 @@ jd_ExportFn jd_V4F jd_V4FMul4(jd_V4F a, jd_V4F b);
 jd_ExportFn jd_V4F jd_V4FMulS(jd_V4F a, f32 b);
 jd_ExportFn jd_V4F jd_V4FMul3S(jd_V4F a, f32 b);
 jd_ExportFn jd_V4F jd_V4FColorLerp(jd_V4F a, jd_V4F b, f32 frac);
+jd_ExportFn f32    jd_F32RoundUp(f32 x);
+jd_ExportFn f32    jd_F32RoundDown(f32 x);
 
 #ifdef JD_IMPLEMENTATION
 #include "jd_math.c"

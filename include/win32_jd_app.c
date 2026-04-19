@@ -200,17 +200,9 @@ void jd_AppUpdatePlatformWindow(jd_Window* window) {
     jd_2DRendererBindWindow(window);
     jd_2DRendererBegin(window);
     
-    jd_RendererGet()->current_window = window;
-    jd_RendererBegin((jd_V2F){window->size.x, window->size.y});
-    
     window->func(window);
     
-    
-    jd_RendererDraw();
-    
-    
     jd_2DRendererDraw();
-    jd_ArenaPopTo(jd_RendererGet()->frame_arena, 0);
     SwapBuffers(window->device_context);
 }
 
@@ -330,7 +322,9 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
         SendMessage(window->handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(jd_AppGetMousePos(window).x, jd_AppGetMousePos(window).y));
     }
     
-    jd_UIFontPush(&font, 12);
+    f32 dpi_scaling = jd_WindowGetDPIScale(window);
+    
+    jd_UIFontPush(&font, 9 * dpi_scaling);
     if (jd_UIFixedSizeButton(jd_StrLit("\xee\x84\x88"), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
         ShowWindow(window->handle, SW_MINIMIZE);
     } 
@@ -355,18 +349,6 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
     jd_UIFontPop();
     
     jd_UIRegionEnd();
-}
-
-void jd_AppLoadSystemFont(jd_Arena* arena) {
-    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
-    jd_File segoe_ui = jd_DiskFileReadFromPath(s.arena, jd_StrLit("C:\\Windows\\Fonts\\segoeui.ttf"), false);
-    jd_File icons    = jd_DiskFileReadFromPath(s.arena, jd_StrLit("assets/jd_font_custom.ttf"), false);
-    
-    jd_FontCreateEmpty(jd_StrLit("OS_BaseFont"), MEGABYTES(32), 16);
-    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), segoe_ui, &jd_unicode_range_basic_latin, 11, 192);
-    jd_FontAddTypefaceFromMemory(jd_StrLit("OS_BaseFont"), icons, &jd_unicode_range_all, 11, 192);
-    
-    jd_ScratchArenaRelease(s);
 }
 
 jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
@@ -618,8 +600,6 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     
     if (!config->app->renderer_initialized) {
         jd_2DRendererInit();
-        jd_RendererInit();
-        jd_AppLoadSystemFont(config->app->arena);
         config->app->renderer_initialized = true;
         DestroyWindow(dummy_win);
     }

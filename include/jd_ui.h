@@ -5,6 +5,7 @@
 
 #ifndef JD_UNITY_H
 #include "jd_app.h"
+#include "jd_font.h"
 #endif
 
 typedef struct jd_UITag {

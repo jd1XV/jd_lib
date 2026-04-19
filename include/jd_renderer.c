@@ -1428,5 +1428,3 @@ void jd_RendererDraw() {
     
     jd_ArenaPopTo(renderer->frame_arena, 0);
 }
-
-#include "jd_renderer2.c"

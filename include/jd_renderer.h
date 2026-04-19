@@ -159,6 +159,7 @@ typedef struct jd_Renderer {
     u32 max_texture_depth;
 } jd_Renderer;
 
+#if 0
 jd_ExportFn jd_Renderer* jd_RendererGet();
 void jd_RendererInit();
 jd_ExportFn void jd_RendererBegin(jd_V2F render_size);
@@ -179,8 +180,7 @@ jd_ExportFn void jd_FontAddTypefaceFromMemory(jd_String font_id, jd_File file, j
 jd_ExportFn f32  jd_FontGetLineAdvForCodepoint(jd_String font_id, u32 codepoint);
 jd_ExportFn f32  jd_FontGetLineHeightForCodepoint(jd_String font_id, u32 codepoint);
 jd_ExportFn jd_Font* jd_FontGetByID(jd_String font_id);
-
-#include "jd_renderer2.h"
+#endif
 
 #ifdef JD_IMPLEMENTATION
 #include "jd_renderer.c"

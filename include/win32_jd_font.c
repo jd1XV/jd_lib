@@ -41,7 +41,7 @@ void jd_Font_Internal_DWriteInit() {
     
     IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2*)jd_internal_font_state->dwrite_factory, 1.0f, 0.0f, 0.0f, 0.0f, 
                                                  DWRITE_PIXEL_GEOMETRY_FLAT,
-                                                 DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+                                                 DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL,
                                                  DWRITE_GRID_FIT_MODE_ENABLED,
                                                  (IDWriteRenderingParams2 **)&jd_internal_font_state->rendering_params);
     
@@ -476,9 +476,9 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, 
     IDWriteFontFace_GetDesignGlyphMetrics(face, &glyph_index, 1, &glyph_metrics, 0);
     
     jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
-    metrics->h_advance = dpi_factor * glyph_metrics.advanceWidth / per_em;
+    metrics->h_advance = (dpi_factor * glyph_metrics.advanceWidth / per_em);
     
-    i16 render_height = dpi_factor * size * (((f32)face_metrics.ascent + (f32)face_metrics.descent) / per_em);
+    i16 render_height = (dpi_factor * size * (((f32)face_metrics.ascent + (f32)face_metrics.descent) / per_em));
     render_height = (i16)(render_height + 0.5f);
     i16 render_width = dpi_factor * size * glyph_metrics.advanceWidth / per_em;
     

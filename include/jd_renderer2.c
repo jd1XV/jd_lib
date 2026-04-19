@@ -188,7 +188,7 @@ void jd_2DShaderCreate() {
     id = glCreateProgram();
     
     u32 vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vs_string.mem, NULL);
+    glShaderSource(vs, 1, &jd_internal_vs_string.mem, NULL);
     glCompileShader(vs);
     
     i32 success = 0;
@@ -205,7 +205,7 @@ void jd_2DShaderCreate() {
     
     u32 fs = glCreateShader(GL_FRAGMENT_SHADER);
     
-    glShaderSource(fs, 1, &fs_string.mem, NULL);
+    glShaderSource(fs, 1, &jd_internal_fs_string.mem, NULL);
     glCompileShader(fs);
     glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
     
@@ -560,6 +560,15 @@ jd_ForceInline void jd_DGQueue(jd_Texture t) {
     }
 }
 
+jd_V4F jd_2DRectClip(jd_V4F rect, jd_V4F clip) {
+    jd_V4F clipped = {
+        .min = {jd_Max(rect.min.x, clip.min.x), jd_Max(rect.min.y, clip.min.y)},
+        .max = {jd_Min(rect.max.x, clip.max.x), jd_Min(rect.max.y, clip.max.y)}
+    };
+    
+    return clipped;
+}
+
 void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, f32 softness, f32 thickness, jd_V4F clip) {
     f32 x = position.x;
     f32 y = position.y;
@@ -572,14 +581,27 @@ void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, 
         .y1 = position.y + size.y
     };
     
+    jd_V4F original_rect = rect;
+    
     jd_Texture t = jd_global_2d_renderer.rectangle_texture;
+    
+    if (!(clip.max.x == 0 && clip.max.y == 0 && clip.min.x == 0 && clip.min.y == 0)) {
+        jd_V4F clipped_rect = jd_2DRectClip(rect, clip);
+        if (clipped_rect.max.x <= clipped_rect.min.x ||
+            clipped_rect.max.y <= clipped_rect.min.y) {
+            return;
+        }
+        
+        rect = clipped_rect;
+    }
+    
     jd_DGQueue(t);
     
     jd_GL2DVertex top_right = {
         .pos = {rect.x1, rect.y1, z},
         .tx = t.uvw_max,
         .color = color,
-        .rect = rect,
+        .rect = original_rect,
         .corner_rad = corner_rad,
         .softness = softness,
         .thickness = thickness
@@ -589,7 +611,7 @@ void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, 
         .pos = {rect.x1, rect.y0, z},
         .tx = {t.uvw_max.u, t.uvw_min.v, t.uvw_max.w},
         .color = color,
-        .rect = rect,
+        .rect = original_rect,
         .corner_rad = corner_rad,
         .softness = softness,
         .thickness = thickness
@@ -599,7 +621,7 @@ void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, 
         .pos = {rect.x0, rect.y0, z},
         .tx = t.uvw_min,
         .color = color,
-        .rect = rect,
+        .rect = original_rect,
         .corner_rad = corner_rad,
         .softness = softness,
         .thickness = thickness
@@ -609,7 +631,7 @@ void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, 
         .pos = {rect.x0, rect.y1, z},
         .tx = {t.uvw_min.u, t.uvw_max.v, t.uvw_max.w},
         .color = color,
-        .rect = rect,
+        .rect = original_rect,
         .corner_rad = corner_rad,
         .softness = softness,
         .thickness = thickness
@@ -622,15 +644,6 @@ void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, 
     jd_DArrayPushBack(vertices, &bottom_left);
     jd_DArrayPushBack(vertices, &top_left);
     jd_DArrayPushBack(vertices, &top_right);
-}
-
-jd_V4F jd_2DRectClip(jd_V4F rect, jd_V4F clip) {
-    jd_V4F clipped = {
-        .min = {jd_Max(rect.min.x, clip.min.x), jd_Max(rect.min.y, clip.min.y)},
-        .max = {jd_Min(rect.max.x, clip.max.x), jd_Min(rect.max.y, clip.max.y)}
-    };
-    
-    return clipped;
 }
 
 void jd_2DTextureClip(jd_Texture* t, jd_V4F original, jd_V4F clipped) {
@@ -782,14 +795,14 @@ void jd_2DGlyphRect(jd_Font2* font, u32 codepoint, u16 point_size, jd_V2F positi
     
     jd_GlyphMetrics* g_metrics = jd_FontGetGlyphMetrics(font, codepoint);
     
-    u32 height = (font->ascent + font->descent) * point_size;
-    u32 width  = (g_metrics->h_advance * point_size);
+    u32 height = ((font->ascent + font->descent) * point_size);
+    u32 width  = ((g_metrics->h_advance * point_size));
     
     jd_V4F rect = {
-        .x0 = position.x,
-        .y0 = position.y,
-        .x1 = position.x + width,
-        .y1 = position.y + height
+        .x0 = jd_F32RoundUp(position.x),
+        .y0 = jd_F32RoundUp(position.y),
+        .x1 = jd_F32RoundUp(position.x + width),
+        .y1 = jd_F32RoundUp(position.y + height)
     };
     
     jd_V4F original_rect = rect;
