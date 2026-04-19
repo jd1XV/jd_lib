@@ -40,5 +40,6 @@ jd_ExportFn jd_Font2 jd_FontAdd(jd_String path);
 jd_GlyphMetrics* jd_FontGetGlyphMetrics(jd_Font2* font, u32 codepoint);
 jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, u32 size);
 jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String string, f32 wrap, b32 wrap_on_newlines);
+jd_V2F jd_FontGetPenPositionForIndex(jd_Font2* font, u16 point_size, jd_String string, u64 index, f32 wrap, b32 wrap_on_newlines);
 
 #endif //JD_FONT_H

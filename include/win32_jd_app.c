@@ -297,6 +297,10 @@ jd_ExportFn u64 jd_AppCurrentFrame(jd_App* app) {
 
 void jd_AppDefaultTitlebar(jd_Window* window) {
     u32 titlebar_height = 45.0f;
+    static jd_Font2 font = {0};
+    if (font.handle == 0) {
+        font = jd_FontAdd(jd_StrLit("C:\\Windows\\Fonts\\seguisym.ttf"));
+    }
     
     {
         const f32 borders = 2.0f;
@@ -320,19 +324,19 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
     
     jd_UIRegionBegin(jd_StrLit("##jd_default_custom_titlebar"), parent_shape, layout, jd_UIBoxFlags_Clickable);
     
-    
     jd_UIShape caption_shape = jd_UIMakeShape(jd_UIGrow, jd_UIFixed(titlebar_height));
     
     if (jd_UIButtonEx(window->title, caption_shape, (jd_UIColors){0}, (jd_V2F){0.5, 0.5}, jd_UIBoxFlags_StaticColor|jd_UIBoxFlags_ActOnClick).l_clicked ) {
         SendMessage(window->handle, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(jd_AppGetMousePos(window).x, jd_AppGetMousePos(window).y));
     }
     
-    if (jd_UIFixedSizeButton(jd_StrLit(jd_FontIcon_Minus), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
+    jd_UIFontPush(&font, 12);
+    if (jd_UIFixedSizeButton(jd_StrLit("\xee\x84\x88"), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
         ShowWindow(window->handle, SW_MINIMIZE);
     } 
     
     {
-        jd_String label = (jd_AppWindowIsMaximized(window)) ? jd_StrLit(jd_FontIcon_Popup) : jd_StrLit(jd_FontIcon_Plus);
+        jd_String label = (jd_AppWindowIsMaximized(window)) ? jd_StrLit("\xEE\x85\x98") : jd_StrLit("\xee\x85\x95");
         if (jd_UIFixedSizeButton(label, (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
             if (jd_AppWindowIsMaximized(window)) {
                 ShowWindow(window->handle, SW_RESTORE);
@@ -344,9 +348,11 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
         
     }
     
-    if (jd_UIFixedSizeButton(jd_StrLit(jd_FontIcon_Cancel), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
+    if (jd_UIFixedSizeButton(jd_StrLit("\xee\x82\xa4"), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
         window->closed = true;
     }
+    
+    jd_UIFontPop();
     
     jd_UIRegionEnd();
 }

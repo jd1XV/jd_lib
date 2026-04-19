@@ -14,7 +14,7 @@ typedef struct jd_Internal_UIState {
     
     jd_DArray* seeds;       // u32
     jd_DArray* parent_stack; // jd_UIBoxRec*
-    jd_DArray* font_id_stack; // jd_String*
+    jd_DArray* font_stack; // jd_FontHandle
     jd_DArray* color_stack; // jd_UIColors
     jd_DArray* layout_stack;
     jd_DArray* shape_stack;
@@ -133,7 +133,7 @@ jd_UIBoxRec* jd_UIBoxGetByTag(jd_UITag tag) {
     return b;
 }
 
-b32 jd_UIRectContainsPoint(jd_UIViewport* vp, jd_RectF32 r, jd_V2F p) {
+b32 jd_UIRectContainsPoint(jd_UIViewport* vp, jd_V4F r, jd_V2F p) {
     jd_V2F min = {r.min.x, r.min.y};
     jd_V2F max = {(r.min.x) + (r.max.x), (r.min.y) + (r.max.y)};
     return ((p.x > min.x && p.x < max.x) && (p.y > min.y && p.y < max.y));
@@ -267,16 +267,21 @@ void jd_UIPickActiveBox(jd_UIViewport* vp) {
     }
 }
 
-void jd_UIFontPush(jd_String font_id) {
-    jd_DArrayPushBack(_jd_internal_ui_state.font_id_stack, &font_id);
+void jd_UIFontPush(jd_Font2* font, u16 point_size) {
+    jd_UISizedFont f = {
+        .font = font,
+        .point_size = point_size
+    };
+    
+    jd_DArrayPushBack(_jd_internal_ui_state.font_stack, &f);
 }
 
 void jd_UIFontPop() {
-    if (_jd_internal_ui_state.font_id_stack->count == 0) {
+    if (_jd_internal_ui_state.font_stack->count == 0) {
         jd_LogError("Mismatched calls to jd_UIFontPop()", jd_Error_APIMisuse, jd_Error_Fatal);
     }
     
-    jd_DArrayPopBack(_jd_internal_ui_state.font_id_stack);
+    jd_DArrayPopBack(_jd_internal_ui_state.font_stack);
 }
 
 void jd_UIParentPush(jd_UIBoxRec* box) {
@@ -477,7 +482,9 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     b->string_id = config->string_id;
     b->layout.axis = ((layout.dir == jd_UILayout_LeftToRight) || layout.dir == jd_UILayout_RightToLeft) ? jd_UIAxis_X : jd_UIAxis_Y;
     b->slider_axis = config->slider_axis;
-    b->font_id = *(jd_String*)jd_DArrayGetBack(_jd_internal_ui_state.font_id_stack);
+    jd_UISizedFont* sized_font = jd_DArrayGetBack(_jd_internal_ui_state.font_stack);
+    b->font = sized_font->font;
+    b->font_size = sized_font->point_size;
     b->cursor = config->cursor;
     
     jd_TreeLinkLastChild(parent, b);
@@ -602,11 +609,10 @@ void jd_UI_Internal_SolveFixedSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
                 s = fallback;
             }
 #endif
-            
             if (s.count)
-                b->rect.max.val[axis] = jd_CalcStringSizeUTF8(b->font_id, s, 0.0f).val[axis];
+                b->rect.max.val[axis] = jd_FontGetTextLayoutExtent(b->font, b->font_size, s, 0.0f, false).val[axis];
             else
-                b->rect.max.val[axis] = jd_FontGetLineAdvForCodepoint(b->font_id, 41);
+                b->rect.max.val[axis] = b->font->layout_line_height;
             
             b->rect.max.val[axis] += (b->shape.padding.val[axis] * 2);
         }
@@ -708,7 +714,7 @@ void jd_UI_Internal_SolveFitChildrenSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             b->rect.max.val[axis] += jd_Max(size, 0) + (b->shape.padding.val[axis] * 2);
             
             if (!child_count && b->label.count) {
-                b->rect.max.val[axis] += jd_CalcStringSizeUTF8(b->font_id, b->label, 0.0f).val[axis];
+                b->rect.max.val[axis] += jd_FontGetTextLayoutExtent(b->font, b->font_size, b->label, 0.0f, 0).val[axis];
             }
             b->requested_size.val[axis] = b->rect.max.val[axis];
         }
@@ -828,15 +834,15 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         f32 corner_radius   = shape.corner_radius;
         f32 thickness       = shape.thickness;
         
-        jd_V3F rect_pos = {b->rect.min.x, b->rect.min.y, z};
+        jd_V2F rect_pos = {b->rect.min.x, b->rect.min.y};
         jd_V2F rect_size = b->rect.max;
         
-        jd_RectF32 clipping_rectangle_self = {
+        jd_V4F clipping_rectangle_self = {
             .min = {b->rect.min.x, b->rect.min.y},
             .max = {b->rect.min.x + (b->rect.max.x), b->rect.min.y + (b->rect.max.y)}
         };
         
-        jd_RectF32 clipping_rectangle_parent = {0};
+        jd_V4F clipping_rectangle_parent = {0};
         if (clip_parent && b->parent) {
             clipping_rectangle_parent = b->parent->rect_clipped;
         } else {
@@ -844,26 +850,25 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         }
         
         if (b->flags & jd_UIBoxFlags_NoClip) {
-            rect_pos.z = 0.0;
             clipping_rectangle_parent.min = (jd_V2F){0, 0};
             clipping_rectangle_parent.max = (jd_V2F){vp->size.x, vp->size.y};
         }
         
-        b->rect_clipped = jd_RectClip(clipping_rectangle_self, clipping_rectangle_parent);
+        b->rect_clipped = jd_2DRectClip(clipping_rectangle_self, clipping_rectangle_parent);
         
         jd_V2F string_pos = {rect_pos.x + b->shape.padding.x, rect_pos.y + b->shape.padding.y};
         if (!(b->flags & jd_UIBoxFlags_InvisibleBG))
-            jd_DrawRectWithZ(rect_pos, rect_size, color, corner_radius, softness, thickness, clipping_rectangle_parent);
+            jd_2DColorRect(rect_pos, rect_size, color, corner_radius, softness, thickness, clipping_rectangle_parent); 
         if (b->shape.stroke_width > 0) {
-            jd_DrawRectWithZ(rect_pos, rect_size, colors.stroke, corner_radius, 1.0f, b->shape.stroke_width, clipping_rectangle_parent);
+            jd_2DColorRect(rect_pos, rect_size, colors.stroke, corner_radius, 1.0f, b->shape.stroke_width, clipping_rectangle_parent); 
         }
         if (b->flags & jd_UIBoxFlags_TextEdit) {
             jd_V2F string_size = {0};
-            jd_String backup_string = jd_StrLit("A");
+            jd_String backup_string = jd_StrLit("M");
             if (b->text_box.string->count == 0) {
-                string_size = jd_CalcStringSizeUTF8(b->font_id, backup_string, b->rect.max.x);
+                string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, backup_string, b->rect.max.x, true);
             } else {
-                string_size = jd_CalcStringSizeUTF8(b->font_id, *b->text_box.string, b->rect.max.x);
+                string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, *b->text_box.string, b->rect.max.x, true);
             }
             
             string_size.x = jd_Min(b->rect.max.x, string_size.x);
@@ -882,50 +887,49 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
                 b->scroll_max.y = string_size.y - rect_size.y;
             }
             
-            jd_V3F final_pos = {string_pos.x, string_pos.y, z};
+            jd_V2F final_pos = {string_pos.x, string_pos.y - ((b->font->ascent - b->font->layout_line_height) * b->font_size)};
             f32 wrap = b->rect.max.x;
             if (!(b->flags & jd_UIBoxFlags_Multiline)) {
                 wrap = 0;
             }
             
             if (b->text_box.string->count)
-                jd_DrawStringWithZ(b->font_id, *b->text_box.string, final_pos, jd_TextOrigin_TopLeft, colors.label, wrap, clipping_rectangle_self);
+                jd_2DString(b->font, *b->text_box.string, b->font_size, final_pos, colors.label, clipping_rectangle_self, wrap, true);
             else if (b != vp->last_active) {
-                jd_DrawStringWithZ(b->font_id, b->text_box.hint, final_pos, jd_TextOrigin_TopLeft, colors.label, wrap, clipping_rectangle_self);
+                jd_2DString(b->font, b->text_box.hint, b->font_size, final_pos, colors.label, clipping_rectangle_self, wrap, true);
             }
             
             if (b == vp->last_active) {
-                jd_V2F cur_pos_v2 = jd_CalcCursorPosUTF8(b->font_id, *b->text_box.string, wrap, b->text_box.cursor);
+                jd_V2F cur_pos_v2 = jd_FontGetPenPositionForIndex(b->font, b->font_size, *b->text_box.string, b->text_box.cursor, wrap, (b->flags & jd_UIBoxFlags_Multiline));
                 
                 if (b->flags & jd_UIBoxFlags_ScrollX) cur_pos_v2.x -= b->scroll.x;
                 if (b->flags & jd_UIBoxFlags_ScrollY) cur_pos_v2.y -= b->scroll.y;
                 
                 jd_V3F cur_pos = {final_pos.x + cur_pos_v2.x, final_pos.y + cur_pos_v2.y, z};
                 b->text_box.last_cursor_pos = (jd_V2F){cur_pos_v2.x, cur_pos_v2.y};
-                jd_V2F cur_size = {2.0f, jd_FontGetLineHeightForCodepoint(b->font_id, '|')};
-                jd_DrawRectWithZ(cur_pos, cur_size, (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0.0, 0.0, 0.0, clipping_rectangle_self);
+                jd_V2F cur_size = {2.0f, b->font->ascent * b->font_size};
+                jd_2DColorRect(cur_pos_v2, cur_size, jd_V4F(1.0f, 1.0f, 1.0f, 1.0f), 0, 0, 0, clipping_rectangle_self);
             }
         }
         
         else if (b->label.count > 0) {
-            jd_V2F string_size = jd_CalcStringSizeUTF8(b->font_id, b->label, 0.0f);
+            jd_V2F string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, b->label, 0.0f, false);
             string_size.x = jd_Min(b->rect.max.x, string_size.x);
             string_size.y = jd_Min(b->rect.max.y, string_size.y);
             string_pos.x += (((rect_size.x - (b->shape.padding.x * 2)) - string_size.x) * b->label_alignment.x);
             string_pos.y += (((rect_size.y - (b->shape.padding.y * 2)) - string_size.y) * b->label_alignment.y);
             jd_V3F final_pos = {string_pos.x, string_pos.y, z};
-            jd_DrawStringWithZ(b->font_id, b->label, final_pos, jd_TextOrigin_TopLeft, colors.label, 0.0f, clipping_rectangle_parent);
+            jd_2DString(b->font, b->label, b->font_size, string_pos, colors.label, clipping_rectangle_parent, 0.0f, false);
         }
         
-        b->rect = jd_RectClip(b->rect, clipping_rectangle_parent);
+        b->rect = jd_2DRectClip(b->rect, clipping_rectangle_parent);
         
-        if (debug && b->font_id.count > 0) {
+        if (debug) {
             jd_V4F debug_color        = {1.0f, 0.0, 0.0, 0.5};
             jd_V4F debug_color_active = {1.0f, 1.0, 0.0, 1.0};
             jd_V4F c = (b == vp->last_active) ? debug_color_active : debug_color;
             if (b == vp->last_active) vp->debug_box = b;
-            
-            jd_DrawRectWithZ(rect_pos, rect_size, c, 0.0f, 0.0f, 1.0f, clipping_rectangle_parent);
+            jd_2DColorRect(rect_pos, rect_size, c, 0, 0, 1.0f, clipping_rectangle_parent);
         }
         
         jd_TreeTraversePreorder(b);
@@ -949,7 +953,7 @@ void jd_UIEnd() {
     
     if (_jd_internal_ui_state.seeds->count > 1 || // There is always a seed in the seed stack!
         _jd_internal_ui_state.parent_stack->count > 0 ||
-        _jd_internal_ui_state.font_id_stack->count > 1 ||
+        _jd_internal_ui_state.font_stack->count > 0 ||
         _jd_internal_ui_state.color_stack->count > 1) {
         jd_LogError("A UI stack is not empty at jd_UIEnd()! Mismatched Push/Pop.", jd_Error_APIMisuse, jd_Error_Warning);
     }
@@ -1026,19 +1030,22 @@ void jd_UIEnd() {
                 
                 case jd_Key_Up: 
                 case jd_Key_Down: {
-                    f32 line_adv = jd_FontGetLineAdvForCodepoint(b->font_id, last_codepoint);
+                    if (b->flags & jd_UIBoxFlags_Multiline) {
+                        f32 line_adv = b->font->line_adv * b->font_size;
+                        
+                        if (e->key == jd_Key_Up)
+                            line_adv = -line_adv;
+                        
+                        jd_V2F current_pos = b->text_box.last_cursor_pos;
+                        jd_V2F new_pos = {current_pos.x + b->scroll.x, current_pos.y + b->scroll.y + line_adv};
+                        u64 cursor = b->text_box.cursor;
+                        u64 new_cursor = jd_FontGetIndexForPenPosition(b->font, b->font_size, *b->text_box.string, new_pos, b->rect.max.x, true);
+                        i64 delta = new_cursor - cursor;
+                        
+                        jd_UnicodeSeekDeltaUTF8(*b->text_box.string, &cursor, delta);
+                        b->text_box.cursor = cursor;
+                    }
                     
-                    if (e->key == jd_Key_Up)
-                        line_adv = -line_adv;
-                    
-                    jd_V2F current_pos = b->text_box.last_cursor_pos;
-                    jd_V2F new_pos = {current_pos.x + b->scroll.x, current_pos.y + b->scroll.y + line_adv};
-                    u64 cursor = b->text_box.cursor;
-                    u64 new_cursor = jd_CalcCursorIndexUTF8(b->font_id, *b->text_box.string, b->rect.max.x, new_pos);
-                    i64 delta = new_cursor - cursor;
-                    
-                    jd_UnicodeSeekDeltaUTF8(*b->text_box.string, &cursor, delta);
-                    b->text_box.cursor = cursor;
                 } break;
                 
                 case jd_Key_Return: {
@@ -1113,7 +1120,7 @@ jd_UIViewport* jd_UIInitForWindow(jd_Window* window) {
         _jd_internal_ui_state.box_array = jd_ArenaAlloc(_jd_internal_ui_state.arena, sizeof(jd_UIBoxRec) * jd_UIBox_HashTable_Size);
         _jd_internal_ui_state.seeds = jd_DArrayCreate(2048, sizeof(u32));
         jd_DArrayPushBack(_jd_internal_ui_state.seeds, &_jd_ui_internal_default_seed);
-        _jd_internal_ui_state.font_id_stack = jd_DArrayCreate(2048, sizeof(jd_String));
+        _jd_internal_ui_state.font_stack = jd_DArrayCreate(2048, sizeof(jd_UISizedFont));
         _jd_internal_ui_state.parent_stack = jd_DArrayCreate(256, sizeof(jd_UIBoxRec*));
         _jd_internal_ui_state.color_stack = jd_DArrayCreate(256, sizeof(jd_UIColors));
         _jd_internal_ui_state.layout_stack = jd_DArrayCreate(256, sizeof(jd_UILayout));

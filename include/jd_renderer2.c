@@ -683,7 +683,7 @@ void jd_2DTextureRect(jd_Texture t, jd_V2F position, jd_V2F size, f32 corner_rad
     jd_V4F original_rect = rect;
     
     if (!(clip.max.x == 0 && clip.max.y == 0 && clip.min.x == 0 && clip.min.y == 0)) {
-        jd_V4F clipped_rect = jd_2DRectClip(rect, clipped_rect);
+        jd_V4F clipped_rect = jd_2DRectClip(rect, clip);
         if (clipped_rect.max.x <= clipped_rect.min.x ||
             clipped_rect.max.y <= clipped_rect.min.y) {
             return;

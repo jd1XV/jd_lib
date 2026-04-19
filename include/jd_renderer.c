@@ -823,6 +823,7 @@ u64 jd_CalcCursorIndex(jd_String font_id, jd_UTFDecodedString utf32_string, f32 
                 continue;
             }
             
+            
             jd_Glyph* g = jd_FontGetGlyph(font, utf32_string.utf32[i]);
             if (!g || g->codepoint == 0) {
                 g = fallback;

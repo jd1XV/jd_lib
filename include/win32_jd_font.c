@@ -284,6 +284,102 @@ jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String stri
     return ext;
 }
 
+jd_V2F jd_FontGetPenPositionForIndex(jd_Font2* font, u16 point_size, jd_String string, u64 index, f32 wrap, b32 wrap_on_newlines) {
+    if (!font || !font->handle) {
+        jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    jd_V2F ext = {0, font->layout_line_height * point_size};
+    jd_V2U pen = {0, 0};
+    jd_ScratchArena s = jd_ScratchArenaCreate(jd_internal_font_state->arena);
+    jd_String32 string32 = jd_UTF8ToUTF32(s.arena, string);
+    jd_Font_Internal_LoadGlyphMetricsForString(font, s.arena, string32);
+    
+    for (u64 i = 0; i < string32.count && i < index; i++) {
+        u32 codepoint = *(string32.mem + i);
+        if (wrap_on_newlines && codepoint == '\n') {
+            ext.y += font->line_adv * point_size;
+            pen.x = 0;
+            pen.y += font->line_adv * point_size;
+        }
+        
+        if (codepoint == '\r') {
+            continue;
+        }
+        
+        jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
+        if ((wrap > 0.0f) && pen.x + (metrics->h_advance * point_size) > wrap) {
+            ext.y += font->line_adv * point_size;
+            pen.x = 0;
+            pen.y += font->line_adv * point_size;
+        } else {
+            pen.x += (metrics->h_advance * point_size);
+        }
+        
+        ext.x = jd_Max(pen.x, ext.x);
+    }
+    
+    jd_ScratchArenaRelease(s);
+    return (jd_V2F){pen.x, pen.y};
+}
+
+u64 jd_FontGetIndexForPenPosition(jd_Font2* font, u16 point_size, jd_String string, jd_V2F position, f32 wrap, b32 wrap_on_newlines) {
+    if (!font || !font->handle) {
+        jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
+    }
+    
+    jd_V2U pen = {0, 0};
+    jd_ScratchArena s = jd_ScratchArenaCreate(jd_internal_font_state->arena);
+    jd_String32 string32 = jd_UTF8ToUTF32(s.arena, string);
+    jd_Font_Internal_LoadGlyphMetricsForString(font, s.arena, string32);
+    b32 y_match_found = false;
+    u64 i = 0;
+    for (i = 0; i < string32.count; i++) {
+        u32 codepoint = *(string32.mem + i);
+        if (wrap_on_newlines && codepoint == '\n') {
+            pen.x = 0;
+            pen.y += font->line_adv * point_size;
+        }
+        
+        if (codepoint == '\r') {
+            continue;
+        }
+        
+        if (i == 0 && position.y < pen.y) {
+            i = 0;
+            return i;
+        }
+        
+        f32 off_x = position.x - pen.x;
+        f32 off_y = position.y - pen.y;
+        
+        f32 off_x_abs = jd_F32Abs(off_x);
+        f32 off_y_abs = jd_F32Abs(off_y);
+        
+        if (off_y_abs <= (font->line_adv * point_size * 0.5) ) {
+            y_match_found = true;
+        }
+        
+        jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
+        
+        if ((off_x_abs <= (metrics->h_advance * point_size * 0.5)) && y_match_found) {
+            jd_ClampToRange(i, 0, string32.count);
+            break;
+        }
+        
+        if ((wrap > 0.0f) && pen.x + (metrics->h_advance * point_size) > wrap) {
+            pen.x = 0;
+            pen.y += font->line_adv * point_size;
+        } else {
+            pen.x += (metrics->h_advance * point_size);
+        }
+        
+    }
+    
+    jd_ScratchArenaRelease(s);
+    return i;
+}
+
 jd_V2F jd_FontGetTextGraphicalExtent(jd_Font2* font, jd_String string) {
     if (!font || !font->handle) {
         jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);

@@ -126,12 +126,11 @@ typedef struct jd_UITextBox {
 typedef struct jd_UIBoxRec {
     jd_UITag   tag;
     jd_String  string_id;
-    jd_RectF32 rect;
-    jd_RectF32 rect_clipped;
+    jd_V4F     rect;
+    jd_V4F     rect_clipped;
     jd_V2F     pos; // platform window space
     jd_V2F     label_alignment;
     jd_String  label;
-    jd_String  font_id;
     jd_V4F     color;
     jd_Cursor  cursor;
     jd_V2F     scroll;
@@ -140,6 +139,9 @@ typedef struct jd_UIBoxRec {
     jd_UIAxis  slider_axis;
     f64        slider_pos;
     jd_V2F     drag_delta;
+    
+    u16 font_size;
+    jd_Font2* font;
     
     jd_UIColors colors;
     jd_UILayout layout;
@@ -224,6 +226,11 @@ typedef struct jd_UIResult {
     b8 hovered;
 } jd_UIResult;
 
+typedef struct jd_UISizedFont {
+    jd_Font2* font;
+    u16       point_size;
+} jd_UISizedFont;
+
 typedef struct jd_UIBoxConfig {
     jd_UIBoxRec*  parent;
     
@@ -273,7 +280,7 @@ jd_ExportFn jd_ForceInline void jd_UISeedPushString(jd_String string);
 jd_ExportFn jd_ForceInline void jd_UISeedPushStringF(jd_String fmt, ...);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
 
-jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_String font_id);
+jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_Font2* font, u16 size);
 jd_ExportFn jd_ForceInline void jd_UIFontPop();
 
 jd_ExportFn jd_ForceInline void jd_UILayoutPush(jd_UILayout layout);
