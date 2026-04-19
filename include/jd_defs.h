@@ -94,6 +94,10 @@ typedef struct jd_V4F {
             f32 w;
             f32 h;
         };
+        struct {
+            jd_V2F min;
+            jd_V2F max;
+        };
     };
 } jd_V4F;
 

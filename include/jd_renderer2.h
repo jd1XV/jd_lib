@@ -20,6 +20,8 @@ typedef struct jd_Texture {
     u32 index;
     jd_V3F uvw_min;
     jd_V3F uvw_max;
+    
+    jd_V2F uv_factor;
 } jd_Texture;
 
 typedef struct jd_TextureCache jd_TextureCache;
@@ -33,7 +35,7 @@ jd_ExportFn u32 jd_TextureKey(jd_String s);
 jd_ExportFn void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, f32 softness, f32 thickness, jd_V4F clip);
 jd_ExportFn void jd_2DGlyphRect(jd_Font2* font, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32* out_advance);
 jd_ExportFn void jd_2DTextureRect(jd_Texture t, jd_V2F position, jd_V2F size, f32 corner_rad, f32 softness, f32 thickness, jd_V4F clip);
-jd_ExportFn void jd_2DString(jd_Font2* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap);
+jd_ExportFn void jd_2DString(jd_Font2* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap, b32 wrap_on_newlines);
 
 jd_ExportFn b32 jd_TextureCacheCheck(jd_TextureCache* cache, u32 key, jd_Texture* texture);
 jd_ExportFn jd_Texture jd_TextureCacheInsert(jd_TextureCache* cache, b8 perm, u32 key, u8* bitmap, b32 monochrome, u32 width, u32 height, b32 fit);
