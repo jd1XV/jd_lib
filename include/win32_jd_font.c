@@ -335,9 +335,9 @@ jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String stri
     for (u64 i = 0; i < string32.count; i++) {
         u32 codepoint = *(string32.mem + i);
         if (wrap_on_newlines && codepoint == '\n') {
-            ext.y += font->line_adv * point_size;
+            ext.y += jd_F32RoundUp(font->line_adv * point_size);
             pen.x = 0;
-            pen.y += font->line_adv * point_size;
+            pen.y += jd_F32RoundUp(font->line_adv * point_size);
         }
         
         if (codepoint == '\r') {
@@ -346,11 +346,11 @@ jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String stri
         
         jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
         if ((wrap > 0.0f) && pen.x + (metrics->h_advance * point_size) > wrap) {
-            ext.y += font->line_adv * point_size;
+            ext.y += jd_F32RoundUp(font->line_adv * point_size);
             pen.x = 0;
-            pen.y += font->line_adv * point_size;
+            pen.y += jd_F32RoundUp(font->line_adv * point_size);
         } else {
-            pen.x += (metrics->h_advance * point_size);
+            pen.x += jd_F32RoundUp(metrics->h_advance * point_size);
         }
         
         ext.x = jd_Max(pen.x, ext.x);

@@ -878,9 +878,8 @@ void jd_2DString(jd_Font2* font, jd_String string, u16 point_size, jd_V2F positi
             }
             
             jd_2DGlyphRect(font, g_metrics, codepoint, point_size, p, color, clip);
-            p.x += (g_metrics->h_advance * point_size);
+            p.x += jd_F32RoundUp(g_metrics->h_advance * point_size);
         }
-        
     }
 }
 
