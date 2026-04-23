@@ -22,6 +22,7 @@
 #include "jd_renderer.h"
 #include "jd_timer.h"
 #include "jd_input.h"
+#include "jd_font.h"
 #endif
 
 /*
@@ -101,6 +102,8 @@ typedef struct jd_WindowConfig {
     jd_AppWindowFunctionPtr function_ptr;
     jd_String function_name;
     
+    b32 v_sync;
+    
     jd_TitleBarStyle titlebar_style;
     jd_TitleBarFunctionPtr titlebar_function_ptr;
 } jd_WindowConfig;
@@ -113,10 +116,13 @@ b32        jd_AppPlatformUpdate(jd_App* app);
 void       jd_AppSetCursor(jd_Cursor cursor);
 void       jd_WindowSetMinimumSize(jd_Window* window, jd_V2I size);
 
+
 jd_ExportFn u64  jd_AppCurrentFrame(jd_App* app);
 jd_ExportFn void jd_AppDefaultTitlebar(jd_Window* window);
 
 #ifdef JD_WINDOWS
+
+#include <win32_icon_font.h>
 
 #ifdef JD_IMPLEMENTATION
 #include "win32_jd_app.c"

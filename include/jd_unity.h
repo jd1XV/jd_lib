@@ -29,8 +29,8 @@
 #include "jd_file.h"
 #include "jd_disk.h"
 #include "jd_input.h"
-#include "jd_app.h"
 #include "jd_font.h"
+#include "jd_app.h"
 #include "jd_renderer2.h"
 #include "jd_ui.h"
 #include "jd_timer.h"
@@ -45,14 +45,15 @@
 #ifdef JD_UNITY_IMP_CHECK
 
 #ifdef JD_WINDOWS
+#include "win32_icon_font.h"
 #include "win32_jd_locks.c"
 #include "win32_jd_memory.c"
 #include "win32_jd_sysinfo.c"
 #include "win32_jd_disk.c"
+#include "win32_jd_font.c"
 #include "win32_jd_app.c"
 #include "win32_jd_timer.c"
 #include "win32_jd_threads.c"
-#include "win32_jd_font.c"
 
 #ifdef JD_DEBUG
 #include "win32_jd_debug.c"

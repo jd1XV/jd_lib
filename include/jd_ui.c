@@ -361,6 +361,7 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     
     b8 act_on_click = (config->flags & jd_UIBoxFlags_ActOnClick);
     b8 clickable    = (config->flags & jd_UIBoxFlags_Clickable);
+    b8 text_edit   = (config->flags & jd_UIBoxFlags_TextEdit);
     
     jd_UITag tag = jd_UITagFromString(config->string_id);
     jd_UIBoxRec* b = jd_UIBoxGetByTag(tag);
@@ -452,6 +453,10 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
                             break;
                         }
                     }
+                }
+                
+                if (text_edit) {
+                    result.text_input = true;
                 }
             }
             
@@ -599,10 +604,12 @@ void jd_UI_Internal_SolveFixedSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
         else if (b->shape.rules[axis].kind == jd_UISizeKind_FitText) {
             jd_String s = b->label;
             if (b->flags & jd_UIBoxFlags_TextEdit) {
-                if (b->flags & jd_UIBoxFlags_Multiline)
-                    s = *(b->text_box.string);
+                s = *(b->text_box.string);
+                if (!s.count) {
+                    s = b->text_box.hint;
+                }
             }
-#if 0
+#if 1
             
             jd_String fallback = jd_StrLit("|");
             if (!s.count) {
@@ -611,8 +618,6 @@ void jd_UI_Internal_SolveFixedSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
 #endif
             if (s.count)
                 b->rect.max.val[axis] = jd_FontGetTextLayoutExtent(b->font, b->font_size, s, 0.0f, false).val[axis];
-            else
-                b->rect.max.val[axis] = b->font->layout_line_height;
             
             b->rect.max.val[axis] += (b->shape.padding.val[axis] * 2);
         }
@@ -821,6 +826,12 @@ void jd_UI_Internal_PositionBoxes(jd_UIBoxRec* root, jd_UIAxis axis) {
     }
 }
 
+b32 jd_UI_Internal_BoxIsOffScreen(jd_UIBoxRec* b) {
+    if (b->rect.min.x > b->vp->size.x) return true;
+    if (b->rect.min.y > b->vp->size.y) return true;
+    return false;
+}
+
 void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
     jd_UIBoxRec* b = root;
     jd_UIViewport* vp = b->vp;
@@ -829,6 +840,11 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
     b8 debug = vp->debug_mode;
     
     while (b) {
+        if (jd_UI_Internal_BoxIsOffScreen(b)) {
+            jd_TreeTraversePreorder(b);
+            continue;
+        }
+        
         jd_UIColors colors = b->colors;
         jd_UILayout layout = b->layout;
         jd_UIShape shape  = b->shape;
@@ -870,12 +886,17 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
             jd_2DColorRect(rect_pos, rect_size, colors.stroke, corner_radius, 1.0f, b->shape.stroke_width, clipping_rectangle_parent); 
         }
         if (b->flags & jd_UIBoxFlags_TextEdit) {
+            f32 wrap = b->rect.max.x;
+            if (!(b->flags & jd_UIBoxFlags_Multiline)) {
+                wrap = 0;
+            }
+            
             jd_V2F string_size = {0};
             jd_String backup_string = jd_StrLit("M");
             if (b->text_box.string->count == 0) {
-                string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, backup_string, b->rect.max.x, true);
+                string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, backup_string, wrap, (wrap));
             } else {
-                string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, *b->text_box.string, b->rect.max.x, true);
+                string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, *b->text_box.string, wrap, (wrap));
             }
             
             string_size.x = jd_Min(b->rect.max.x, string_size.x);
@@ -894,11 +915,7 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
                 b->scroll_max.y = string_size.y - rect_size.y;
             }
             
-            jd_V2F final_pos = {string_pos.x, string_pos.y - ((b->font->ascent - b->font->layout_line_height) * b->font_size)};
-            f32 wrap = b->rect.max.x;
-            if (!(b->flags & jd_UIBoxFlags_Multiline)) {
-                wrap = 0;
-            }
+            jd_V2F final_pos = {string_pos.x, string_pos.y};
             
             if (b->text_box.string->count)
                 jd_2DString(b->font, *b->text_box.string, b->font_size, final_pos, colors.label, clipping_rectangle_self, wrap, true);
@@ -912,10 +929,10 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
                 if (b->flags & jd_UIBoxFlags_ScrollX) cur_pos_v2.x -= b->scroll.x;
                 if (b->flags & jd_UIBoxFlags_ScrollY) cur_pos_v2.y -= b->scroll.y;
                 
-                jd_V3F cur_pos = {final_pos.x + cur_pos_v2.x, final_pos.y + cur_pos_v2.y, z};
+                jd_V2F cur_pos = {final_pos.x + cur_pos_v2.x, final_pos.y + cur_pos_v2.y};
                 b->text_box.last_cursor_pos = (jd_V2F){cur_pos_v2.x, cur_pos_v2.y};
-                jd_V2F cur_size = {2.0f, b->font->ascent * b->font_size};
-                jd_2DColorRect(cur_pos_v2, cur_size, jd_V4F(1.0f, 1.0f, 1.0f, 1.0f), 0, 0, 0, clipping_rectangle_self);
+                jd_V2F cur_size = {2.0f, (b->font->layout_line_height * b->font_size) * 1.2f};
+                jd_2DColorRect(cur_pos, cur_size, jd_V4F(1.0f, 1.0f, 1.0f, 1.0f), 0, 0, 0, clipping_rectangle_self);
             }
         }
         
@@ -1465,6 +1482,20 @@ jd_UIResult jd_UIInputTextBoxWithHint(jd_String string_id, jd_UIShape shape, jd_
     jd_UIBoxConfig config = {0};
     config.flags = jd_UIBoxFlags_Clickable|jd_UIBoxFlags_TextEdit|jd_UIBoxFlags_StaticColor;
     config.string_id  = string_id;
+    config.shape = shape;
+    config.cursor = jd_Cursor_Default;
+    config.text_box = (jd_UITextBox){ .string = string, .max = max_string_size, .hint = hint };
+    
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    
+    return result;
+}
+
+jd_UIResult jd_UIInputTextBoxMultiline(jd_String string_id, jd_UIShape shape, jd_String* string, jd_String hint, u64 max_string_size) {
+    jd_UIBoxConfig config = {0};
+    config.flags = jd_UIBoxFlags_Clickable|jd_UIBoxFlags_TextEdit|jd_UIBoxFlags_Multiline;
+    config.string_id = string_id;
     config.shape = shape;
     config.cursor = jd_Cursor_Default;
     config.text_box = (jd_UITextBox){ .string = string, .max = max_string_size, .hint = hint };

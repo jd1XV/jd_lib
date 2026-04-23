@@ -136,14 +136,14 @@ static jd_ForceInline u32 jd_Codepoint16to32(jd_String16 string16, u64* index) {
     
     u32 codepoint = 0;
     u16 first = string16.mem[i];
-    if (first >= 0xD800 || first <= 0xDFFF) {
+    if (first >= 0xD800 && first <= 0xDFFF) {
         if (i + 1 >= string16.count) {
             jd_LogError("Incomplete UTF16 surrogate pair.", jd_Error_BadInput, jd_Error_Common);
             return codepoint;
         }
         
-        u16 high_sur = string16.mem[i + 1];
-        u16 low_sur  = string16.mem[i];
+        u16 high_sur = string16.mem[i];
+        u16 low_sur  = string16.mem[i + 1];
         
         high_sur -= 0xD800;
         high_sur *= 0x400;
@@ -180,10 +180,43 @@ jd_String16 jd_UTF8ToUTF16(jd_Arena* arena, jd_String string) {
             u16 high_sur = (decode >> 10) + 0xD800;
             u16 low_sur  = (decode & 0x3FF) + 0xDC00;
             
-            string16.mem[string16.count] = low_sur;
+            string16.mem[string16.count] = high_sur;
             string16.count++;
             
+            string16.mem[string16.count] = low_sur;
+            string16.count++;
+        } else {
+            string16.mem[string16.count] = (u16)codepoint;
+            string16.count++;
+        }
+    }
+    
+    jd_ArenaPopTo(arena, s.pos + (sizeof(u16) * (string16.count)));
+    return string16;
+}
+
+jd_String16 jd_UTF32ToUTF16(jd_Arena* arena, jd_String32 string32) {
+    jd_String16 string16 = {0};
+    if (!string32.count) return string16;
+    
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+    string16.mem = jd_ArenaAlloc(arena, sizeof(u16) * (string32.count * 2) + 1);
+    
+    for (u64 i = 0; i < string32.count; i++) {
+        u32 codepoint = string32.mem[i];
+        if (!codepoint) {
+            break;
+        }
+        
+        if (codepoint > 0xFFFF) {
+            u32 decode = codepoint - 0x10000;
+            u16 high_sur = (decode >> 10) + 0xD800;
+            u16 low_sur  = (decode & 0x3FF) + 0xDC00;
+            
             string16.mem[string16.count] = high_sur;
+            string16.count++;
+            
+            string16.mem[string16.count] = low_sur;
             string16.count++;
         } else {
             string16.mem[string16.count] = (u16)codepoint;
@@ -211,44 +244,6 @@ jd_String32 jd_UTF8ToUTF32(jd_Arena* arena, jd_String string) {
     
     jd_ArenaPopTo(arena, s.pos + (sizeof(u32) * (string32.count)));
     return string32;
-}
-
-jd_String   jd_UTF16toUTF8(jd_Arena* arena, jd_String16 string) {
-    
-}
-
-jd_String   jd_UTF32toUTF8(jd_Arena* arena, jd_String32 string) {
-    
-}
-
-u32 jd_UnicodeDecodeUTF16Codepoint(u16* buf, u32 count) {
-    u32 codepoint = 0;
-    
-    if (count == 0) {
-        return codepoint;
-    }
-    
-    if (count > 2) {
-        return codepoint;
-    }
-    
-    if (count == 1) {
-        codepoint = (*buf);
-        return codepoint;
-    } 
-    
-    else {
-        u16 high_sur = (*buf + 1);
-        u16 low_sur  = (*buf);
-        
-        high_sur -= 0xD800;
-        high_sur *= 0x400;
-        
-        low_sur -= 0xDC00;
-        
-        codepoint = high_sur + low_sur + 0x10000;
-        return codepoint;
-    }
 }
 
 u32 jd_UnicodeUTF32toUTF8(u32 codepoint, c8* buffer, u32 buf_size) {
@@ -291,6 +286,61 @@ u32 jd_UnicodeUTF32toUTF8(u32 codepoint, c8* buffer, u32 buf_size) {
     }
     
     return count;
+}
+
+jd_String jd_UTF16toUTF8(jd_Arena* arena, jd_String16 string16) {
+    jd_String string = {0};
+    if (!string16.count) return string;
+    jd_ScratchArena s = jd_ScratchArenaCreate(arena);
+    string.mem = jd_ArenaAlloc(arena, sizeof(u8) * string16.count * 2);
+    
+    for (u64 i = 0; i < string16.count;) {
+        u32 codepoint = jd_Codepoint16to32(string16, &i);
+        if (!codepoint) break;
+        c8 buf[4] = {0};
+        u32 count = jd_UnicodeUTF32toUTF8(codepoint, buf, 4);
+        for (u64 buf_i = 0; buf_i < count; buf_i++) {
+            string.mem[string.count] = buf[buf_i];
+            string.count++;
+        }
+    }
+    
+    jd_ArenaPopTo(arena, s.pos + string.count);
+    return string;
+}
+
+jd_String   jd_UTF32toUTF8(jd_Arena* arena, jd_String32 string) {
+    
+}
+
+u32 jd_UnicodeDecodeUTF16Codepoint(u16* buf, u32 count) {
+    u32 codepoint = 0;
+    
+    if (count == 0) {
+        return codepoint;
+    }
+    
+    if (count > 2) {
+        return codepoint;
+    }
+    
+    if (count == 1) {
+        codepoint = (*buf);
+        return codepoint;
+    } 
+    
+    else {
+        u16 high_sur = (*buf + 1);
+        u16 low_sur  = (*buf);
+        
+        high_sur -= 0xD800;
+        high_sur *= 0x400;
+        
+        low_sur -= 0xDC00;
+        
+        codepoint = high_sur + low_sur + 0x10000;
+        return codepoint;
+    }
 }
 
 jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf, jd_String input, b32 validate) {

@@ -283,12 +283,7 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
             trunc_str.mem++;
             trunc_str.count--;
             jd_String* last_tag = jd_DArrayGetBack(parser->unclosed_tags);
-            if (last_tag && jd_StringMatch(jd_StrLit("rss"), *last_tag)) {
-                int x = 0;
-            }
-            if (!last_tag) {
-                int x = 0;
-            }
+            
             if (jd_StringMatch(trunc_str, *last_tag)) {
                 jd_DArrayPopBack(parser->unclosed_tags);
                 parser->node = parser->node->parent;
@@ -301,9 +296,6 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
         
         else {
             jd_String key = parser->token;
-            if (jd_StringMatch(key, jd_StrLit("button"))) {
-                int x = 0;
-            }
             if (key.count == 0) {
                 jd_LogError("Unable to parse a key from the XML input file", jd_Error_BadInput, jd_Error_Common);
                 parser->error = true;

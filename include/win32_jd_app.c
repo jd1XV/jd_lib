@@ -1,5 +1,4 @@
 #include "dep/glad/glad_wgl.h"
-#include "jd_icon_font.h"
 
 #define JD_APP_MAX_PACKAGE_NAME_LENGTH KILOBYTES(1)
 
@@ -288,11 +287,8 @@ jd_ExportFn u64 jd_AppCurrentFrame(jd_App* app) {
 }
 
 void jd_AppDefaultTitlebar(jd_Window* window) {
+    
     u32 titlebar_height = 45.0f;
-    static jd_Font2 font = {0};
-    if (font.handle == 0) {
-        font = jd_FontAdd(jd_StrLit("C:\\Windows\\Fonts\\seguisym.ttf"));
-    }
     
     {
         const f32 borders = 2.0f;
@@ -324,13 +320,13 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
     
     f32 dpi_scaling = jd_WindowGetDPIScale(window);
     
-    jd_UIFontPush(&font, 9 * dpi_scaling);
-    if (jd_UIFixedSizeButton(jd_StrLit("\xee\x84\x88"), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
+    jd_UIFontPush(jd_OSSymbolFont(), 11 * dpi_scaling);
+    if (jd_UIFixedSizeButton(jd_StrLit(jd_IconFont_Minimize), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
         ShowWindow(window->handle, SW_MINIMIZE);
     } 
     
     {
-        jd_String label = (jd_AppWindowIsMaximized(window)) ? jd_StrLit("\xEE\x85\x98") : jd_StrLit("\xee\x85\x95");
+        jd_String label = (jd_AppWindowIsMaximized(window)) ? jd_StrLit(jd_IconFont_PopUp) : jd_StrLit(jd_IconFont_Maximize);
         if (jd_UIFixedSizeButton(label, (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
             if (jd_AppWindowIsMaximized(window)) {
                 ShowWindow(window->handle, SW_RESTORE);
@@ -342,7 +338,7 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
         
     }
     
-    if (jd_UIFixedSizeButton(jd_StrLit("\xee\x82\xa4"), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
+    if (jd_UIFixedSizeButton(jd_StrLit(jd_IconFont_Cancel), (jd_V2F){titlebar_height * 1.5f, titlebar_height}, (jd_V2F){0.5, 0.5}).l_clicked) {
         window->closed = true;
     }
     
@@ -595,7 +591,13 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     }
     
     wglMakeCurrent(window->device_context, config->app->ogl_context);
-    wglSwapIntervalEXT(0);
+    
+    if (config->v_sync) {
+        wglSwapIntervalEXT(1);
+    } else {
+        wglSwapIntervalEXT(0);
+    }
+    
     ShowWindow(window->handle, SW_SHOW);
     
     if (!config->app->renderer_initialized) {

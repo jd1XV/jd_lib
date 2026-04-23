@@ -1159,10 +1159,6 @@ b32 jd_DataFilterEvaluatePassedArrays(jd_DataFilter* f, jd_DataNode* node, b32 c
                 if (!n->parent) continue;
                 b32 parent_match = (jd_StringMatch(kp->p->key, n->parent->key) && kp->p->value.type == n->parent->value.type);
                 b32 child_match =  (jd_StringMatch(f->key, n->key) && f->value.type == n->value.type);
-                if (jd_StringMatch(n->key, jd_StrLit("feed_title"))
-                    && jd_StringMatch(n->value.string, jd_StrLit("Blowback Podcast: Season 6 | Premium edition"))) {
-                    int x = 0;
-                }
                 if (parent_match && child_match) {
                     eval = jd_Internal_DataFilterCompare(f, n, case_sensitive, used_nodes, used_nodes_index);
                     if (eval) {

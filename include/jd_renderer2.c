@@ -286,7 +286,7 @@ jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, 1);
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -323,7 +323,7 @@ void jd_TextureCacheCopyTexture(jd_CachedTexture* t, jd_CachedTextureSlot* slot,
     
     jd_V2F transfer_size = {0};
     
-    if (fit) {
+    if (fit && (width > cache->cell_width || height > cache->cell_height)) {
         b32 portrait = (width < height);
         if (portrait) {
             t->dest_size.y = cache->cell_height;
@@ -776,27 +776,25 @@ jd_Texture jd_GlyphGetTexture(jd_Font2* font, u32 codepoint, u16 point_size) {
             b32 fallback_exists = jd_TextureCacheCheck(jd_global_2d_renderer.core_texture_cache, jd_GlyphTextureID(font, point_size, codepoint), &t);
             if (!fallback_exists) {
                 bitmap = jd_FontGetGlyphBitmap(jd_global_2d_renderer.frame_arena, font, codepoint, point_size);
-                t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, false);
+                t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, true);
             }
         } else {
-            t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, false);
+            t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, true);
         }
     }
     
     return t;
 }
 
-void jd_2DGlyphRect(jd_Font2* font, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32* out_advance) {
+void jd_2DGlyphRect(jd_Font2* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip) {
     f32 x = position.x;
     f32 y = position.y;
     f32 z = 0;
     
     jd_Texture t = jd_GlyphGetTexture(font, codepoint, point_size);
     
-    jd_GlyphMetrics* g_metrics = jd_FontGetGlyphMetrics(font, codepoint);
-    
     u32 height = ((font->ascent + font->descent) * point_size);
-    u32 width  = ((g_metrics->h_advance * point_size));
+    u32 width  = ((metrics->h_advance * point_size));
     
     jd_V4F rect = {
         .x0 = jd_F32RoundUp(position.x),
@@ -811,7 +809,6 @@ void jd_2DGlyphRect(jd_Font2* font, u32 codepoint, u16 point_size, jd_V2F positi
         jd_V4F clipped_rect = jd_2DRectClip(rect, clip);
         if (clipped_rect.max.x < clipped_rect.min.x ||
             clipped_rect.max.y < clipped_rect.min.y) {
-            *out_advance += width;
             return;
         }
         jd_2DTextureClip(&t, rect, clipped_rect);
@@ -855,20 +852,35 @@ void jd_2DGlyphRect(jd_Font2* font, u32 codepoint, u16 point_size, jd_V2F positi
     jd_DArrayPushBack(vertices, &bottom_left);
     jd_DArrayPushBack(vertices, &top_left);
     jd_DArrayPushBack(vertices, &top_right);
-    
-    //jd_2DColorRect(position, jd_V2F(width, height), (jd_V4F){1.0f, 1.0f, 1.0f, 1.0f}, 0, 0, 1.0f, clip);
-    
-    *out_advance += width;
 }
 
 void jd_2DString(jd_Font2* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap, b32 wrap_on_newlines) {
     jd_V2F p = position;
     jd_V2F ext = jd_FontGetTextLayoutExtent(font, point_size, string, wrap, wrap_on_newlines);
     p.y -= ((font->ascent - font->layout_line_height) * point_size);
-    for (u64 i = 0; i < string.count;) {
+    for (u64 i = 0; i < string.count;) { 
         u32 codepoint = jd_Codepoint8to32(string, &i);
-        if (codepoint)
-            jd_2DGlyphRect(font, codepoint, point_size, p, color, clip, &p.x);
+        
+        if (codepoint) {
+            jd_GlyphMetrics* g_metrics = jd_FontGetGlyphMetrics(font, codepoint);
+            if (wrap && (p.x + (g_metrics->h_advance * point_size)) > wrap) {
+                p.x  = position.x;
+                p.y += (font->line_adv * point_size);
+            }
+            
+            if (wrap_on_newlines && codepoint == 0x0a) {
+                p.x = position.x;
+                p.y += (font->line_adv * point_size);
+            }
+            
+            if (codepoint == 0x0d) {
+                continue;
+            }
+            
+            jd_2DGlyphRect(font, g_metrics, codepoint, point_size, p, color, clip);
+            p.x += (g_metrics->h_advance * point_size);
+        }
+        
     }
 }
 

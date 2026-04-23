@@ -3,6 +3,7 @@
 #ifndef JD_ICON_FONT_H
 #define JD_ICON_FONT_H
 
+#if 0
 #define jd_FontIcon_Cancel "\xee\xa0\x80"
 #define jd_FontIcon_Plus   "\xee\xa0\x81"
 #define jd_FontIcon_Minus   "\xee\xa0\x82"
@@ -47,6 +48,7 @@
 #define jd_FontIcon_Code  "\xee\xa0\xa9"
 #define jd_FontIcon_Floppy  "\xee\xa0\xaa"
 #define jd_FontIcon_History  "\xee\xa0\xab"
+#endif
 
 
 #endif //JD_ICON_FONT_H

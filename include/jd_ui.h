@@ -313,6 +313,7 @@ jd_ExportFn jd_UIResult jd_UIInputTextBox(jd_String string_id, jd_UIShape shape,
 jd_ExportFn jd_UIResult jd_UIInputTextBoxAligned(jd_String string_id, jd_UIShape shape, jd_String* string, u64 max_string_size, jd_V2F alignment);
 jd_ExportFn jd_UIResult jd_UIInputTextBoxAlignedWithHint(jd_String string_id, jd_UIShape shape, jd_String* string, jd_String hint, u64 max_string_size, jd_V2F alignment);
 jd_ExportFn jd_UIResult jd_UIInputTextBoxWithHint(jd_String string_id, jd_UIShape shape, jd_String* string, jd_String hint, u64 max_string_size);
+jd_ExportFn jd_UIResult jd_UIInputTextBoxMultiline(jd_String string_id, jd_UIShape shape, jd_String* string, jd_String hint, u64 max_string_size);
 jd_ExportFn jd_UIResult jd_UIWindowRegionBegin(jd_V2F min_size, jd_UILayoutDir dir, f32 gap);
 jd_ExportFn jd_UIResult jd_UIGrowPadding(jd_String string_id);
 jd_ExportFn jd_UIResult jd_UIFixedPadding(jd_String string_id, jd_V2F fixed_size);
