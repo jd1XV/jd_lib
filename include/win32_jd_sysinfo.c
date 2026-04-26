@@ -83,7 +83,6 @@ f64 jd_SysInfoGetPerformanceFrequencyMS() {
 }
 
 #ifdef JD_DEBUG
-
 void jd_DebugPrintSysInfo() {
     jd_CPUFlags flags = jd_SysInfoGetCPUFlags();
     jd_DebugPrint(jd_StrLit("CPU Vector Extensions Supported:\n"));

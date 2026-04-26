@@ -50,16 +50,11 @@ u32            jd_ThreadGetExitCode(jd_Thread* thread);
 
 
 #ifdef JD_IMPLEMENTATION
+
 #ifdef JD_WINDOWS
 #include "win32_jd_threads.c"
 #endif
+
 #endif
-
-
-/*
-
-Thread pool status can be managed by a structure passed to and by the threadpool's addwork function -- where it can then be updated after the function ptr returns. It should have a RW lock.
-
-*/
 
 #endif //JD_THREADS_H

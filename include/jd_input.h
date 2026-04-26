@@ -132,16 +132,16 @@ typedef enum jd_Key {
     _jd_InputMap(jd_Key_Media_PlayPause,    0xB3),
     
     _jd_InputMap(jd_Key_SemiColon_Colon,    0xBA),   // ';:' for US
-    _jd_InputMap(jd_Key_Equals_Plus,        0xBB), // '+' any country
+    _jd_InputMap(jd_Key_Equals_Plus,        0xBB),   // '+' any country
     _jd_InputMap(jd_Key_Comma_LessThan,     0xBC),   // ',' any country
     _jd_InputMap(jd_Key_Hyphen_UnderScore,  0xBD),   // '-' any country
     _jd_InputMap(jd_Key_Period_GreaterThan, 0xBE),   // '.' any country
     _jd_InputMap(jd_Key_FSlash_QMark,       0xBF),   // '/?' for US
     _jd_InputMap(jd_Key_Grave_Tilde,        0xC0),   // '`~' for US
-    _jd_InputMap(jd_Key_LBrack_LBrace,      0xDB),  //  '[{' for US
-    _jd_InputMap(jd_Key_BSlash_VBar,        0xDC),  //  '\|' for US
-    _jd_InputMap(jd_Key_RBrack_RBrace,      0xDD),  //  ']}' for US
-    _jd_InputMap(jd_Key_Apos_Comma,         0xDE),  //  ''"' for US
+    _jd_InputMap(jd_Key_LBrack_LBrace,      0xDB),   //  '[{' for US
+    _jd_InputMap(jd_Key_BSlash_VBar,        0xDC),   //  '\|' for US
+    _jd_InputMap(jd_Key_RBrack_RBrace,      0xDD),   //  ']}' for US
+    _jd_InputMap(jd_Key_Apos_Comma,         0xDE),   //  ''"' for US
     jd_Key_Count
 } jd_Key;
 

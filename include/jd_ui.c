@@ -267,7 +267,7 @@ void jd_UIPickActiveBox(jd_UIViewport* vp) {
     }
 }
 
-void jd_UIFontPush(jd_Font2* font, u16 point_size) {
+void jd_UIFontPush(jd_Font* font, u16 point_size) {
     jd_UISizedFont f = {
         .font = font,
         .point_size = point_size
@@ -388,7 +388,6 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
         parent = vp->popup_root_new;
     }
     
-    //b->draw_index = vp->box_count;
     vp->box_count++;
     
     // input handling
@@ -491,6 +490,9 @@ jd_UIResult jd_UIBoxBegin(jd_UIBoxConfig* config) {
     b->font = sized_font->font;
     b->font_size = sized_font->point_size;
     b->cursor = config->cursor;
+    if (b->flags & jd_UIBoxFlags_Textured) {
+        b->texture = config->texture;
+    }
     
     jd_TreeLinkLastChild(parent, b);
     
@@ -561,8 +563,6 @@ jd_UIViewport* jd_UIBegin(jd_UIViewport* viewport) {
     }
     
     vp->root->rect.max = (jd_V2F){vp->window->size.x, vp->window->size.y};
-    
-    // Get new inputs
     vp->old_inputs = vp->new_inputs;
     vp->new_inputs.index = vp->old_inputs.range;
     vp->new_inputs.range = vp->old_inputs.array->count;
@@ -609,13 +609,11 @@ void jd_UI_Internal_SolveFixedSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
                     s = b->text_box.hint;
                 }
             }
-#if 1
             
             jd_String fallback = jd_StrLit("|");
             if (!s.count) {
                 s = fallback;
             }
-#endif
             if (s.count)
                 b->rect.max.val[axis] = jd_FontGetTextLayoutExtent(b->font, b->font_size, s, 0.0f, false).val[axis];
             
@@ -660,7 +658,7 @@ void jd_UI_Internal_SolveGrowSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
                 
                 f32 per_grow_size = (total_grow_size / (1+grow_siblings));
                 
-                b->rect.max.val[axis] = per_grow_size;
+                b->rect.max.val[axis] = jd_Max(0.0f, per_grow_size);
             } else {
                 b->rect.max.val[axis] = p->rect.max.val[axis] - (p->shape.padding.val[axis] * 2);
             }
@@ -758,26 +756,16 @@ void jd_UI_Internal_FinalizeSizes(jd_UIBoxRec* root, jd_UIAxis axis) {
             
         }
         
-#if 0        
-        for (jd_UIBoxRec* c = b->first_child; c != 0; c = c->next) {
-            if (c->shape.rules[axis] == jd_UISizeKind_PctParent) {
-                c->rect.max.val[axis] = b->rect.max.val[axis] * c->size.pct_of_parent.val[axis];
-            }
-        }
-#endif
-        
         f32 diff = (size - allowed_size);
         b->scroll_max.val[axis] = (diff > 0) ? diff : 0;
         if (b->scroll.val[axis] > b->scroll_max.val[axis]) {
             b->scroll.val[axis] = b->scroll_max.val[axis];
         }
         
-#if 1        
         b->rect.min.x = jd_F32RoundUp(b->rect.min.x);
         b->rect.min.y = jd_F32RoundUp(b->rect.min.y);
         b->rect.max.x = jd_F32RoundUp(b->rect.max.x);
         b->rect.max.y = jd_F32RoundUp(b->rect.max.y);
-#endif
         
         jd_TreeTraversePreorder(b);
     }
@@ -885,6 +873,30 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         if (b->shape.stroke_width > 0) {
             jd_2DColorRect(rect_pos, rect_size, colors.stroke, corner_radius, 1.0f, b->shape.stroke_width, clipping_rectangle_parent); 
         }
+        
+        if (b->flags & jd_UIBoxFlags_Textured) {
+            jd_V2F image_position = rect_pos;
+            f32 tex_width  = b->texture.uvw_max.x - b->texture.uvw_min.x;
+            f32 tex_height = b->texture.uvw_max.y - b->texture.uvw_min.y;
+            b8 portrait = tex_width < tex_height;
+            f32 aspect_ratio = tex_width / tex_height;
+            
+            f32 width = 0;
+            f32 height = 0;
+            
+            if (portrait) {
+                height = b->rect.max.y;
+                width  = height * aspect_ratio;
+                image_position.x += (b->rect.max.x - width) / 2;
+            } else {
+                width  = b->rect.max.x;
+                height = width / aspect_ratio;
+                image_position.y += (b->rect.max.y - height) / 2;
+            }
+            
+            jd_2DTextureRect(b->texture, image_position, jd_V2F(width, height), corner_radius, softness, thickness, clipping_rectangle_self);
+        }
+        
         if (b->flags & jd_UIBoxFlags_TextEdit) {
             f32 wrap = b->rect.max.x;
             if (!(b->flags & jd_UIBoxFlags_Multiline)) {
@@ -1579,6 +1591,19 @@ jd_UIResult jd_UIGrowPadding(jd_String string_id) {
     return result;
 }
 
+jd_UIResult jd_UIImage(jd_String string_id, jd_UIShape shape, jd_Texture texture, b32 maintain_aspect_ratio) {
+    jd_UIBoxConfig config = {0};
+    config.flags = jd_UIBoxFlags_Textured|jd_UIBoxFlags_InvisibleBG;
+    config.texture = texture;
+    config.string_id = string_id;
+    config.shape = shape;
+    config.cursor = jd_Cursor_Default;
+    config.maintain_texture_aspect_ratio = maintain_aspect_ratio;
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    return result;
+}
+
 jd_UIBoxRec* jd_UIGetLastBox() {
     jd_UIViewport* vp = jd_UIViewportGetCurrent();
     return vp->builder_last_box;
@@ -1587,10 +1612,8 @@ jd_UIBoxRec* jd_UIGetLastBox() {
 void jd_UIResetScroll(jd_UIBoxRec* b) {
     b->scroll_max.x = 0;
     b->scroll_max.y = 0;
-#if 1
     b->scroll.x = 0;
     b->scroll.y = 0;
-#endif
 }
 
 jd_UIBoxRec* jd_UIGetDebugBox() {

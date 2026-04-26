@@ -178,6 +178,7 @@ void jd_AppUpdatePlatformWindow(jd_Window* window) {
     window->frame_time = window->frame_watch.stop;
     window->frame_watch = jd_TimerStart();
     
+    
     // get the size
     RECT client_rect = {0};
     GetClientRect(window->handle, &client_rect);
@@ -332,7 +333,6 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
                 ShowWindow(window->handle, SW_RESTORE);
             } else {
                 ShowWindow(window->handle, SW_MAXIMIZE);
-                //SendMessage(window->handle, WM_SIZE, SIZE_MAXIMIZED, 0);
             }
         }
         
@@ -423,23 +423,20 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     }
     
     window->handle = CreateWindowExA(
-                                     CS_OWNDC|CS_HREDRAW|CS_VREDRAW,                              // Optional window styles.
-                                     window->wndclass_str.mem,               // Window class
-                                     window->title.mem,                      // Window textc
-                                     win_style,                   // Window style
-                                     
-                                     // Size and position
+                                     CS_OWNDC|CS_HREDRAW|CS_VREDRAW,
+                                     window->wndclass_str.mem,
+                                     window->title.mem,
+                                     win_style,
                                      CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                                     
-                                     NULL,       // Parent window    
-                                     NULL,       // Menu
-                                     GetModuleHandle(NULL),  // Instance handle
-                                     NULL // Additional application data
+                                     NULL,
+                                     NULL,
+                                     GetModuleHandle(NULL),
+                                     NULL
                                      );
     
     
     if (window->handle == NULL) {
-        // err
+        jd_LogError("Could not create window.", jd_Error_MissingResource, jd_Error_Fatal);
     }
     
     SetWindowLongPtrA(window->handle, 0, (LONG_PTR)window);
@@ -462,7 +459,7 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     window->device_context = GetDC(window->handle);
     
     if (!window->device_context) {
-        // TODO: err
+        jd_LogError("Could not create Win32 device context.", jd_Error_MissingResource, jd_Error_Fatal);
     }
     
     HWND dummy_win = 0;
@@ -497,27 +494,24 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
         u32 win_style = WS_OVERLAPPEDWINDOW;
         
         dummy_win = CreateWindowExA(
-                                    CS_OWNDC,                              // Optional window styles.
-                                    "dummy_wndclass",                      // Window class
-                                    "dummy_window",                      // Window textc
-                                    win_style,                   // Window style
-                                    
-                                    // Size and position
+                                    CS_OWNDC,
+                                    "dummy_wndclass",
+                                    "dummy_window",
+                                    win_style,
                                     CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                                    
-                                    NULL,       // Parent window    
-                                    NULL,       // Menu
-                                    GetModuleHandle(NULL),  // Instance handle
-                                    NULL        // Additional application data
+                                    NULL,
+                                    NULL,
+                                    GetModuleHandle(NULL),
+                                    NULL
                                     );
         
         if (dummy_win == NULL) {
-            // err
+            jd_LogError("Could not create bootstrap window.", jd_Error_MissingResource, jd_Error_Fatal);
         }
         
         dummy_hdc = GetDC(dummy_win);
         if (!dummy_hdc) {
-            // err
+            jd_LogError("Could not create bootstrap Win32 device context.", jd_Error_MissingResource, jd_Error_Fatal);
         }
         
         PIXELFORMATDESCRIPTOR pfd = {
@@ -541,11 +535,11 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
         
         i32 pf = ChoosePixelFormat(dummy_hdc, &pfd);
         if (pf == 0) {
-            // TODO: err
+            jd_LogError("Could not create pixel format descriptor.", jd_Error_MissingResource, jd_Error_Fatal);
         }
         
         if (!(SetPixelFormat(dummy_hdc, pf, &pfd))) {
-            // TODO: err
+            jd_LogError("Could not set pixel format.", jd_Error_MissingResource, jd_Error_Fatal);
         }
         
         fake_context = wglCreateContext(dummy_hdc);
@@ -918,7 +912,6 @@ jd_App* jd_AppCreate(jd_AppConfig* config) {
 }
 
 jd_V2I jd_WindowGetDrawSize(jd_Window* window) {
-    // get the size
     RECT client_rect = {0};
     GetClientRect(window->handle, &client_rect);
     window->size.w = client_rect.right;
@@ -952,6 +945,10 @@ b32 jd_AppWindowIsActive(jd_Window* window) {
     HWND handle = GetForegroundWindow();
     if (window->handle != handle) return false;
     else return true;
+}
+
+b32 jd_AppWindowIsMinimized(jd_Window* window) {
+    return IsIconic(window->handle);
 }
 
 b32 jd_AppWindowIsVisibleAndHovered(jd_Window* window) {

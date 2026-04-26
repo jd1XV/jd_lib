@@ -366,7 +366,7 @@ jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf,
     return dec_str;
 }
 
-u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index) {
+jd_ForceInline u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index) {
     static const u8 length_table[] = {
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
@@ -415,11 +415,6 @@ u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index) {
     return codepoint;
     
 }
-
-// 0xxxxxxx
-// 110xxxxx 10xxxxxx
-// 1110xxxx 10xxxxxx 10xxxxxx
-// 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
 
 jd_String jd_UnicodeEncodeUTF32toUTF8(jd_Arena* arena, jd_UTFDecodedString input, b32 validate) {
     jd_String str = {

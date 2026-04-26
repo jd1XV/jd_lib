@@ -15,7 +15,6 @@ jd_String jd_StrLit(c8* c_str) {
 
 jd_String jd_StringPush(jd_Arena* arena, jd_String str) {
     if (str.count == 0) {
-        jd_LogError("String is empty!", jd_Error_BadInput, jd_Error_Warning);
         return str;
     }
     jd_String string = {

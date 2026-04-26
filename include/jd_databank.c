@@ -238,9 +238,7 @@ jd_DataNode* jd_DataPointSet(jd_DataNode* record, jd_String key, jd_Value value)
 jd_DataNode* jd_DataBankGetRecord(jd_DataNode* start, jd_String key) {
     jd_DataNode* n = start;
     if (!n) return n;
-    //jd_RWLockGet(start->bank->lock, jd_RWLock_Read);
     jd_TreeTraversePreorder(n);
-    //jd_RWLockRelease(start->bank->lock, jd_RWLock_Read);
     if (!n) return n;
     jd_RWLockGet(start->bank->lock, jd_RWLock_Read);
     while (n) {
@@ -353,8 +351,6 @@ jd_Value jd_ValueCastF64(f64 val) {
     v.F64 = val;
     return v;
 }
-
-#define jd_ValueCheckAssign(v)  
 
 jd_String jd_ValueString(jd_Value v) {
     if (v.type == jd_DataType_String)
@@ -775,18 +771,7 @@ jd_DataFilter* jd_DataFilterPushOr(jd_Arena* arena, jd_DataFilter* filter, jd_St
     return f;
 }
 
-#if 0
-
-#endif
-
 #define jd_ReadPtrAtAddr(x) ((void*)(u64)*x)
-
-/*
-
-1. Traverse the tree and create a dynamic array of all records found
-2. 
-
-*/
 
 b32 jd_Internal_DataFilterCompare(jd_DataFilter* f, jd_DataNode* n, b32 case_sensitive, jd_DataNode** used_nodes, u64 used_nodes_count) {
     b32 eval = 0;

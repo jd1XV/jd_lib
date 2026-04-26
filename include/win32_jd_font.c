@@ -5,8 +5,8 @@
 
 #define jd_Font_Internal_DWrite_Max_Faces 256
 
-static jd_Font2 jd_os_base_font = {0};
-static jd_Font2 jd_os_symbol_font = {0};
+static jd_Font jd_os_base_font = {0};
+static jd_Font jd_os_symbol_font = {0};
 
 typedef struct jd_Font_Internal_DWriteObjects {
     IDWriteFontFace* face;
@@ -49,8 +49,8 @@ void jd_Font_Internal_DWriteInit() {
     
     IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2*)jd_internal_font_state->dwrite_factory, 1.0f, 0.0f, 0.0f, 0.0f, 
                                                  DWRITE_PIXEL_GEOMETRY_FLAT,
-                                                 DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC,
-                                                 DWRITE_GRID_FIT_MODE_ENABLED,
+                                                 DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL,
+                                                 DWRITE_GRID_FIT_MODE_DEFAULT,
                                                  (IDWriteRenderingParams2 **)&jd_internal_font_state->rendering_params);
     
     if (!jd_internal_font_state->rendering_params) {
@@ -86,11 +86,11 @@ void jd_Font_Internal_DWriteInit() {
     }
 }
 
-jd_Font2 jd_FontAdd(jd_String path) {
+jd_Font jd_FontAdd(jd_String path) {
     if (!jd_internal_font_state) {
         jd_Font_Internal_DWriteInit();
     }
-    jd_Font2 font = {0};
+    jd_Font font = {0};
     if (!jd_DiskPathExists(path)) {
         jd_LogError("Requested font does not exist.", jd_Error_BadInput, jd_Error_Critical);
         return font;
@@ -240,13 +240,13 @@ HRESULT STDMETHODCALLTYPE QueryInterfaceStump(IDWriteTextAnalysisSource* this, R
 
 jd_ReadOnly static u32 _jd_fonts_default_seed = 104720809;
 
-jd_ForceInline u32 jd_GlyphMetricsID(jd_Font2* font, u32 codepoint) {
+jd_ForceInline u32 jd_GlyphMetricsID(jd_Font* font, u32 codepoint) {
     u32 to_hash = (codepoint << 11) + font->handle;
     u32 key = jd_HashU32toU32(to_hash, _jd_fonts_default_seed);
     return key;
 }
 
-void jd_Font_Internal_LoadGlyphMetricsForString(jd_Font2* font, jd_Arena* arena, jd_String32 string32) {
+void jd_Font_Internal_LoadGlyphMetricsForString(jd_Font* font, jd_Arena* arena, jd_String32 string32) {
     u16* glyph_indices = jd_ArenaAlloc(arena, sizeof(u32) * string32.count);
     
     jd_Font_Internal_DWriteObjects* objects = &jd_internal_font_state->per_handle_objects[font->handle - 1];
@@ -320,7 +320,7 @@ void jd_Font_Internal_LoadGlyphMetricsForString(jd_Font2* font, jd_Arena* arena,
     }
 }
 
-jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String string, f32 wrap, b32 wrap_on_newlines) {
+jd_V2F jd_FontGetTextLayoutExtent(jd_Font* font, u16 point_size, jd_String string, f32 wrap, b32 wrap_on_newlines) {
     if (!font || !font->handle) {
         jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
     }
@@ -361,7 +361,7 @@ jd_V2F jd_FontGetTextLayoutExtent(jd_Font2* font, u16 point_size, jd_String stri
     return ext;
 }
 
-jd_V2F jd_FontGetPenPositionForIndex(jd_Font2* font, u16 point_size, jd_String string, u64 index, f32 wrap, b32 wrap_on_newlines) {
+jd_V2F jd_FontGetPenPositionForIndex(jd_Font* font, u16 point_size, jd_String string, u64 index, f32 wrap, b32 wrap_on_newlines) {
     if (!font || !font->handle) {
         jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
     }
@@ -401,7 +401,7 @@ jd_V2F jd_FontGetPenPositionForIndex(jd_Font2* font, u16 point_size, jd_String s
     return (jd_V2F){pen.x, pen.y};
 }
 
-u64 jd_FontGetIndexForPenPosition(jd_Font2* font, u16 point_size, jd_String string, jd_V2F position, f32 wrap, b32 wrap_on_newlines) {
+u64 jd_FontGetIndexForPenPosition(jd_Font* font, u16 point_size, jd_String string, jd_V2F position, f32 wrap, b32 wrap_on_newlines) {
     if (!font || !font->handle) {
         jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
     }
@@ -458,13 +458,13 @@ u64 jd_FontGetIndexForPenPosition(jd_Font2* font, u16 point_size, jd_String stri
     return i;
 }
 
-jd_V2F jd_FontGetTextGraphicalExtent(jd_Font2* font, jd_String string) {
+jd_V2F jd_FontGetTextGraphicalExtent(jd_Font* font, jd_String string) {
     if (!font || !font->handle) {
         jd_LogError("Font has not been initialized. Font should be returned by jd_FontAdd", jd_Error_APIMisuse, jd_Error_Fatal);
     }
 }
 
-jd_GlyphMetrics* jd_FontGetGlyphMetrics(jd_Font2* font, u32 codepoint) {
+jd_GlyphMetrics* jd_FontGetGlyphMetrics(jd_Font* font, u32 codepoint) {
     u32 glyph_id = jd_GlyphMetricsID(font, codepoint);
     jd_GlyphMetrics* metrics = &font->metrics_table[glyph_id % font->metrics_table_count];
     if (metrics->codepoint == 0 && metrics->font == 0) {
@@ -487,7 +487,7 @@ jd_GlyphMetrics* jd_FontGetGlyphMetrics(jd_Font2* font, u32 codepoint) {
     return metrics;
 }
 
-jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, u32 size) {
+jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font* font, u32 codepoint, u32 size) {
     jd_Bitmap zero_bitmap = {0};
     
     if (!font || !font->handle) {
@@ -558,7 +558,6 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, 
     metrics->offset_y = dpi_factor * ((f32)glyph_metrics.topSideBearing / per_em);
     
     i16 render_height = (dpi_factor * size * (((f32)face_metrics.ascent + (f32)face_metrics.descent) / per_em));
-    render_height = (i16)(render_height + 0.5f);
     i16 render_width = dpi_factor * size * glyph_metrics.advanceWidth / per_em;
     
     IDWriteBitmapRenderTarget* target = 0;
@@ -617,9 +616,6 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, 
         color_glyph = true;
         if (color_enum) {
             DWRITE_COLOR_GLYPH_RUN* run = 0;
-            b32 has_run = true;
-            
-            
             D2D1_COLOR_F clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
             D2D1_BRUSH_PROPERTIES props = {1.0f, D2DGetIdentity()};
             
@@ -627,6 +623,8 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, 
             D2D_MATRIX_3X2_F identity = D2DGetIdentity();
             ID2D1DCRenderTarget_SetTransform(jd_internal_font_state->d2d_render_target, &identity);
             ID2D1DCRenderTarget_Clear(jd_internal_font_state->d2d_render_target, &clear_color);
+            
+            b32 has_run = true;
             
             while (1) {
                 HRESULT result = IDWriteColorGlyphRunEnumerator_MoveNext(color_enum, &has_run);
@@ -642,48 +640,11 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, 
                 
                 D2D1_POINT_2F baseline_origin = {run->baselineOriginX, run->baselineOriginY};
                 ID2D1DCRenderTarget_DrawGlyphRun(jd_internal_font_state->d2d_render_target, baseline_origin, &run->glyphRun, (ID2D1Brush*)brush, DWRITE_MEASURING_MODE_NATURAL);
-                
             }
             
             ID2D1DCRenderTarget_EndDraw(jd_internal_font_state->d2d_render_target, 0, 0);
         }
     }
-    
-#if 0    
-    RECT bb = {0};
-    IDWriteRenderingParams* rendering_params = jd_internal_font_state->rendering_params;
-    
-    f32 descent = size * font->descent;
-    
-    IDWriteColorGlyphRunEnumerator* color_enum = 0;
-    HRESULT color_present = IDWriteFactory2_TranslateColorGlyphRun((IDWriteFactory2*)jd_internal_font_state->dwrite_factory, 0.0f, (render_height) - descent, &glyph_run, 0, DWRITE_MEASURING_MODE_NATURAL, 0, 0, &color_enum);
-    
-    b32 color_glyph = false;
-    
-    if (color_present == DWRITE_E_NOCOLOR) {
-        COLORREF fg_color = RGB(255, 255, 255);
-        HRESULT result = IDWriteBitmapRenderTarget_DrawGlyphRun(target, 0.0f, render_height - (descent), DWRITE_MEASURING_MODE_NATURAL, &glyph_run, rendering_params, fg_color, &bb);
-    } else {
-        color_glyph = true;
-        if (color_enum) {
-            DWRITE_COLOR_GLYPH_RUN* run = 0;
-            b32 has_run = true;
-            while (1) {
-                HRESULT result = IDWriteColorGlyphRunEnumerator_MoveNext(color_enum, &has_run);
-                if (!has_run) {
-                    break;
-                }
-                
-                result = IDWriteColorGlyphRunEnumerator_GetCurrentRun(color_enum, &run);
-                COLORREF fg_color = RGB(run->runColor.r * 255, run->runColor.g * 255, run->runColor.b * 255);
-                RECT rect = {0};
-                IDWriteBitmapRenderTarget_DrawGlyphRun(target, run->baselineOriginX, run->baselineOriginY, DWRITE_MEASURING_MODE_NATURAL, &run->glyphRun, jd_internal_font_state->rendering_params, fg_color, &rect);
-                
-            }
-            
-        }
-    }
-#endif
     
     u8* return_bitmap = jd_ArenaAlloc(arena, sizeof(u32) * render_width * render_height);
     DIBSECTION dib = {0};
@@ -727,7 +688,7 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font2* font, u32 codepoint, 
     return bmp;
 }
 
-jd_Font2* jd_OSBaseFont() {
+jd_Font* jd_OSBaseFont() {
     if (!jd_os_base_font.handle) {
         jd_os_base_font = jd_FontAdd(jd_StrLit("C:\\Windows\\Fonts\\segoeui.ttf"));
     }
@@ -735,7 +696,7 @@ jd_Font2* jd_OSBaseFont() {
     return &jd_os_base_font;
 }
 
-jd_Font2* jd_OSSymbolFont() {
+jd_Font* jd_OSSymbolFont() {
     if (!jd_os_symbol_font.handle) {
         jd_os_symbol_font = jd_FontAdd(jd_StrLit("C:\\Windows\\Fonts\\segoeicons.ttf"));
     }

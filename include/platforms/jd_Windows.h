@@ -36,10 +36,3 @@
 #define jd_F32_Min FLT_MIN
 
 #endif //JD__WINDOWS_H
-
-/*
-
-Calling: 
-Declaring: #define jd_Reloadable __declspec(dllexport)
-
-*/

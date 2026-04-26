@@ -8,8 +8,6 @@
 #include "jd_string.h"
 #endif
 
-// TODO: Consider merging with jd_string.h/.c
-
 typedef enum jd_UnicodeTF {
     jd_UnicodeTF_UTF8,
     jd_UnicodeTF_UTF16,
@@ -46,18 +44,12 @@ jd_ExportFn jd_String   jd_UTF16toUTF8(jd_Arena* arena, jd_String16 string);
 jd_ExportFn jd_String16 jd_UTF32ToUTF16(jd_Arena* arena, jd_String32 string32);
 jd_ExportFn jd_String   jd_UTF32toUTF8(jd_Arena* arena, jd_String32 string);
 
-// 0xxxxxxx
-// 110xxxxx 10xxxxxx
-// 1110xxxx 10xxxxxx 10xxxxxx
-// 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-
 #define _jd_PackU64_u8(a,b,c,d, e,f,g,h) \
 (a << 56) + (b << 48) + (c << 40) + (d << 32) + (e << 24) + (f << 16) + (g << 8) + h
 
-
 jd_UTFDecodedString jd_UnicodeDecodeUTF8String(jd_Arena* arena, jd_UnicodeTF tf, jd_String input, b32 validate);
 jd_String jd_UnicodeEncodeUTF32toUTF8(jd_Arena* arena, jd_UTFDecodedString input, b32 validate);
-jd_ForceInline u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index);
+u32 jd_UnicodeDecodeUTF8Codepoint(jd_String string, u64 index);
 u32 jd_UnicodeDecodeUTF16Codepoint(u16* buf, u32 count);
 u32 jd_UnicodeUTF16toUTF8(u16 wide[2], u32 wide_count, c8* buffer, u32 buf_size);
 u32 jd_UnicodeUTF32toUTF8(u32 codepoint, c8* buffer, u32 buf_size);

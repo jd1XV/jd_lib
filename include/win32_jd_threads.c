@@ -59,7 +59,6 @@ jd_ThreadFunction(_jd_thread_internal_worker_thread, tpp) {
         
         jd_UserLockRelease(tp->lock);
         job->func(job->param);
-        // TODO: generate report id and store it
     }
     
     return 1;

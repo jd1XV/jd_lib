@@ -57,7 +57,8 @@ typedef enum jd_UIBoxFlags {
     jd_UIBoxFlags_DragandDrop          = 1 << 9,
     jd_UIBoxFlags_Multiline            = 1 << 10,
     jd_UIBoxFlags_InvisibleBG          = 1 << 11,
-    jd_UIBoxFlags_NoClip               = 1 << 12
+    jd_UIBoxFlags_NoClip               = 1 << 12,
+    jd_UIBoxFlags_Textured             = 1 << 13
 } jd_UIBoxFlags;
 
 typedef struct jd_UISizeRule {
@@ -108,11 +109,6 @@ jd_ExportFn jd_UIColors jd_UIMakeColors(jd_V4F bg, jd_V4F bg_hovered, jd_V4F bg_
 jd_ExportFn jd_UILayout jd_UIMakeLayout(jd_UILayoutDir dir, f32 gap);
 
 jd_ExportFn jd_V4F jd_UIColorHexToV4F(u32 rgba);
-//
-//#define jd_UIMakeShape(rule_x, rule_y) {{rule_x, rule_y}}
-//#define jd_UIMakeShapeEx(rule_x, rule_y, padding_x, padding_y, softness, corner_radius, thickness, stroke_width) {{rule_x, rule_y}, {padding_x, padding_y}, softness, corner_radius, thickness, stroke_width}
-//#define jd_UIMakeColors(bg, bg_hovered, bg_active, label, stroke) {bg, bg_hovered, bg_active, label, stroke}
-//#define jd_UIMakeLayout(dir, gap) {dir, gap}
 
 typedef struct jd_UITextBox {
     jd_String hint;
@@ -141,8 +137,11 @@ typedef struct jd_UIBoxRec {
     f64        slider_pos;
     jd_V2F     drag_delta;
     
+    jd_Texture texture;
+    b8 maintain_texture_aspect_ratio;
+    
     u16 font_size;
-    jd_Font2* font;
+    jd_Font* font;
     
     jd_UIColors colors;
     jd_UILayout layout;
@@ -228,7 +227,7 @@ typedef struct jd_UIResult {
 } jd_UIResult;
 
 typedef struct jd_UISizedFont {
-    jd_Font2* font;
+    jd_Font* font;
     u16       point_size;
 } jd_UISizedFont;
 
@@ -257,9 +256,8 @@ typedef struct jd_UIBoxConfig {
     
     b32 draggable;
     
-    // TODO: Texture information? I feel like there's no reason to not have it this low level with this design,
-    // and it makes textured rectangles a first class citizen. Thereotically, with the right application of these
-    // flags, we can have skinning by default.
+    jd_Texture texture;
+    b8 maintain_texture_aspect_ratio;
 } jd_UIBoxConfig;
 
 typedef jd_UIBoxConfig jd_UIButtonConfig;
@@ -281,7 +279,7 @@ jd_ExportFn jd_ForceInline void jd_UISeedPushString(jd_String string);
 jd_ExportFn jd_ForceInline void jd_UISeedPushStringF(jd_String fmt, ...);
 jd_ExportFn jd_ForceInline void jd_UISeedPop();
 
-jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_Font2* font, u16 size);
+jd_ExportFn jd_ForceInline void jd_UIFontPush(jd_Font* font, u16 size);
 jd_ExportFn jd_ForceInline void jd_UIFontPop();
 
 jd_ExportFn jd_ForceInline void jd_UILayoutPush(jd_UILayout layout);
@@ -299,6 +297,7 @@ jd_ExportFn jd_ForceInline jd_UIBoxRec*   jd_UIGetLastBox();
 jd_ExportFn jd_ForceInline void           jd_UIResetScroll(jd_UIBoxRec* b);
 jd_ExportFn jd_ForceInline jd_UIBoxRec*   jd_UIGetDebugBox();
 
+jd_ExportFn jd_UIResult jd_UIImage(jd_String string_id, jd_UIShape shape, jd_Texture texture, b32 maintain_aspect_ratio);
 jd_ExportFn jd_UIResult jd_UIButtonEx(jd_String label, jd_UIShape shape, jd_UIColors colors, jd_V2F label_alignment, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UISliderF32(jd_String string_id, jd_UIShape shape, jd_UIShape shape_button, jd_UIAxis axis, f32* v, f32 min, f32 max);
 jd_ExportFn jd_UIResult jd_UISliderU64(jd_String string_id, jd_UIShape shape, jd_UIShape shape_button, jd_UIAxis axis, u64* v, u64 min, u64 max);

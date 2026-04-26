@@ -257,7 +257,6 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
             
             jd_XMLParserSeekChars(parser, jd_StrLit("?"), true);
             jd_XMLParserSeekChars(parser, jd_StrLit(">"), true);
-            //parser->index++;
             continue;
         }
         
@@ -331,7 +330,6 @@ jd_XMLNode* jd_XMLTreeFromString(jd_XMLParser* parser, jd_Arena* arena, jd_Strin
         jd_String* unclosed_tag = jd_DArrayGetBack(parser->unclosed_tags);
         jd_LogError("Missing closing tag in XML file", jd_Error_BadInput, jd_Error_Common);
         parser->error = true;
-        //jd_XML2SetError(parser->root, XML_MISSING_CLOSING_TAG, parser->index);
     }
     
     if (root->first_child == NULL) {

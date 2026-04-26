@@ -25,16 +25,6 @@
 #include "jd_font.h"
 #endif
 
-/*
-
-Reloadable functions:
-
-#ifdef JD_APP_RELOADABLE
-jd_ReloadableFunction
-#endif
-
-*/
-
 #define JD_APP_MAX_WINDOWS 2048
 
 typedef struct jd_Window jd_Window;
@@ -110,12 +100,12 @@ typedef struct jd_WindowConfig {
 
 void       jd_AppUpdatePlatformWindows(jd_App* app);
 jd_Window* jd_AppCreateWindow(jd_WindowConfig* config);
+b32        jd_AppWindowIsMinimized(jd_Window* window);
 b32        jd_AppWindowIsActive(jd_Window* window);
 void       jd_AppPlatformCloseWindow(jd_Window* window);
 b32        jd_AppPlatformUpdate(jd_App* app);
 void       jd_AppSetCursor(jd_Cursor cursor);
 void       jd_WindowSetMinimumSize(jd_Window* window, jd_V2I size);
-
 
 jd_ExportFn u64  jd_AppCurrentFrame(jd_App* app);
 jd_ExportFn void jd_AppDefaultTitlebar(jd_Window* window);
