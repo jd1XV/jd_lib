@@ -24,6 +24,11 @@ typedef struct jd_Texture {
     jd_V2F uv_factor;
 } jd_Texture;
 
+typedef enum jd_TextureFilter {
+    jd_TextureFilter_Nearest,
+    jd_TextureFilter_Linear
+} jd_TextureFilter;
+
 typedef struct jd_TextureCache jd_TextureCache;
 void jd_2DRendererBindWindow(struct jd_Window* window);
 void jd_2DRendererBegin(struct jd_Window* window);
@@ -40,7 +45,7 @@ jd_ExportFn void jd_2DString(jd_Font* font, jd_String string, u16 point_size, jd
 
 jd_ExportFn b32 jd_TextureCacheCheck(jd_TextureCache* cache, u32 key, jd_Texture* texture);
 jd_ExportFn jd_Texture jd_TextureCacheInsert(jd_TextureCache* cache, b8 perm, u32 key, u8* bitmap, b32 monochrome, u32 width, u32 height, b32 fit);
-jd_ExportFn jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u32 depth, u32 cell_width, u32 cell_height);
+jd_ExportFn jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u32 depth, u32 cell_width, u32 cell_height, jd_TextureFilter resize_filter);
 
 
 #endif //JD_RENDERER2_H

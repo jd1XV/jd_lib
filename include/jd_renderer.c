@@ -230,7 +230,7 @@ void jd_2DShaderCreate() {
     jd_global_2d_renderer.objects.shader = id;
 }
 
-jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u32 depth, u32 cell_width, u32 cell_height) {
+jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u32 depth, u32 cell_width, u32 cell_height, jd_TextureFilter resize_filter) {
     jd_TextureCache* cache = jd_ArenaAlloc(arena, sizeof(*cache));
     cache->arena = arena;
     cache->cell_width = cell_width;
@@ -284,8 +284,8 @@ jd_TextureCache* jd_TextureCacheCreate(jd_Arena* arena, u32 width, u32 height, u
     
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, (resize_filter) ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, (resize_filter) ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, 1);
     
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -521,7 +521,7 @@ void jd_2DRendererInit() {
     u64 core_texture_cache_cw = 128;
     u64 core_texture_cache_ch = 256;
     
-    r->core_texture_cache = jd_TextureCacheCreate(arena, core_texture_cache_w, core_texture_cache_h, core_texture_cache_d, core_texture_cache_cw, core_texture_cache_ch);
+    r->core_texture_cache = jd_TextureCacheCreate(arena, core_texture_cache_w, core_texture_cache_h, core_texture_cache_d, core_texture_cache_cw, core_texture_cache_ch, jd_TextureFilter_Nearest);
     u8* bitmap = jd_ArenaAlloc(r->frame_arena, sizeof(u32) * (core_texture_cache_cw * core_texture_cache_ch));
     jd_MemSet(bitmap, 0xFF, sizeof(u32) * (core_texture_cache_cw * core_texture_cache_ch));
     r->rectangle_texture = jd_TextureCacheInsert(r->core_texture_cache, true, jd_TextureKey(jd_StrLit("jd_internal_rectangle_texture")), bitmap, false, core_texture_cache_cw, core_texture_cache_ch, true);
@@ -793,7 +793,7 @@ void jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 
     jd_Texture t = jd_GlyphGetTexture(font, codepoint, point_size);
     
     u32 height = ((font->ascent + font->descent) * point_size);
-    u32 width  = ((metrics->h_advance * point_size));
+    u32 width  = jd_F32RoundUp((metrics->h_advance * point_size));
     
     jd_V4F rect = {
         .x0 = jd_F32RoundUp(position.x),

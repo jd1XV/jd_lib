@@ -567,7 +567,7 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font* font, u32 codepoint, u
     i16 render_height = jd_F32RoundUp(dpi_factor * size * (face_metrics.ascent + face_metrics.descent) / per_em);
     i16 render_width  = jd_F32RoundUp(dpi_factor * size * (glyph_metrics.advanceWidth / per_em));
     
-    metrics->h_advance = render_width / (f32)size;
+    metrics->h_advance = dpi_factor * (glyph_metrics.advanceWidth / per_em);
     
     IDWriteBitmapRenderTarget* target = 0;
     IDWriteGdiInterop_CreateBitmapRenderTarget(jd_internal_font_state->gdi_interop, 0, render_width, render_height, &target);

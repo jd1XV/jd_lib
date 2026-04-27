@@ -15,6 +15,8 @@ void jd_UserLockRelease(jd_UserLock* lock);
 b32 jd_UserLockTryGet(jd_UserLock* lock);
 void jd_UserLockDelete(jd_UserLock* lock);
 
+#define jd_UserLockScope(lock)  for ( i32 _jd_user_lock_scope_counter = ((jd_UserLockGet(lock)), 0); !_jd_user_lock_scope_counter; _jd_user_lock_scope_counter += 1, (jd_UserLockRelease(lock)) )
+
 typedef enum jd_RWLockMode {
     jd_RWLock_Read,
     jd_RWLock_Write,
