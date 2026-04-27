@@ -16,7 +16,8 @@ typedef struct jd_Font_Internal_DWriteObjects {
 typedef struct jd_Internal_FontState {
     jd_Arena* arena;
     IDWriteFactory* dwrite_factory;
-    IDWriteRenderingParams* rendering_params;
+    IDWriteRenderingParams* rendering_params_color;
+    IDWriteRenderingParams* rendering_params_default;
     IDWriteGdiInterop* gdi_interop;
     IDWriteFontFallback* fallback;
     
@@ -49,11 +50,18 @@ void jd_Font_Internal_DWriteInit() {
     
     IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2*)jd_internal_font_state->dwrite_factory, 1.0f, 0.0f, 0.0f, 0.0f, 
                                                  DWRITE_PIXEL_GEOMETRY_FLAT,
-                                                 DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL,
+                                                 DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC,
                                                  DWRITE_GRID_FIT_MODE_DEFAULT,
-                                                 (IDWriteRenderingParams2 **)&jd_internal_font_state->rendering_params);
+                                                 (IDWriteRenderingParams2 **)&jd_internal_font_state->rendering_params_default);
     
-    if (!jd_internal_font_state->rendering_params) {
+    IDWriteFactory2_CreateCustomRenderingParams2((IDWriteFactory2*)jd_internal_font_state->dwrite_factory, 1.0f, 0.0f, 0.0f, 0.0f, 
+                                                 DWRITE_PIXEL_GEOMETRY_FLAT,
+                                                 DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,
+                                                 DWRITE_GRID_FIT_MODE_DEFAULT,
+                                                 (IDWriteRenderingParams2 **)&jd_internal_font_state->rendering_params_color);
+    
+    if (!jd_internal_font_state->rendering_params_default ||
+        !jd_internal_font_state->rendering_params_color) {
         jd_LogError("Could not create DirectWrite rendering parameters", jd_Error_MissingResource, jd_Error_Fatal);
     }
     
@@ -553,12 +561,13 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font* font, u32 codepoint, u
     IDWriteFontFace_GetDesignGlyphMetrics(face, &glyph_index, 1, &glyph_metrics, 0);
     
     jd_GlyphMetrics* metrics = jd_FontGetGlyphMetrics(font, codepoint);
-    metrics->h_advance = (dpi_factor * glyph_metrics.advanceWidth / per_em);
     metrics->offset_x = dpi_factor * ((f32)glyph_metrics.leftSideBearing / per_em);
     metrics->offset_y = dpi_factor * ((f32)glyph_metrics.topSideBearing / per_em);
     
-    i16 render_height = (dpi_factor * size * (((f32)face_metrics.ascent + (f32)face_metrics.descent) / per_em));
-    i16 render_width = dpi_factor * size * glyph_metrics.advanceWidth / per_em;
+    i16 render_height = jd_F32RoundUp(dpi_factor * size * (face_metrics.ascent + face_metrics.descent) / per_em);
+    i16 render_width  = jd_F32RoundUp(dpi_factor * size * (glyph_metrics.advanceWidth / per_em));
+    
+    metrics->h_advance = render_width / (f32)size;
     
     IDWriteBitmapRenderTarget* target = 0;
     IDWriteGdiInterop_CreateBitmapRenderTarget(jd_internal_font_state->gdi_interop, 0, render_width, render_height, &target);
@@ -596,9 +605,10 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font* font, u32 codepoint, u
     
     b32 color_glyph = false;
     
-    ID2D1DCRenderTarget_SetTextRenderingParams(jd_internal_font_state->d2d_render_target, jd_internal_font_state->rendering_params);
-    
     if (color_present == DWRITE_E_NOCOLOR) {
+        
+        ID2D1DCRenderTarget_SetTextRenderingParams(jd_internal_font_state->d2d_render_target, jd_internal_font_state->rendering_params_default);
+        
         D2D1_POINT_2F baseline_origin = {0, render_height - (descent)};
         D2D1_COLOR_F color = {1.0f, 1.0f, 1.0f, 1.0f};
         D2D1_COLOR_F clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -615,6 +625,7 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font* font, u32 codepoint, u
     } else {
         color_glyph = true;
         if (color_enum) {
+            ID2D1DCRenderTarget_SetTextRenderingParams(jd_internal_font_state->d2d_render_target, jd_internal_font_state->rendering_params_color);
             DWRITE_COLOR_GLYPH_RUN* run = 0;
             D2D1_COLOR_F clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
             D2D1_BRUSH_PROPERTIES props = {1.0f, D2DGetIdentity()};
@@ -656,10 +667,10 @@ jd_Bitmap jd_FontGetGlyphBitmap(jd_Arena* arena, jd_Font* font, u32 codepoint, u
     u8* src = (u8*)dib.dsBm.bmBits;
     if (color_glyph) {
         for (u64 i = 0; i < (render_width * render_height); i++) {
-            return_bitmap[i * 4] = src[(i * 4) + 2];
-            return_bitmap[(i * 4) + 1] = src[(i * 4) + 1];
-            return_bitmap[(i * 4) + 2] = src[i * 4];
-            return_bitmap[(i * 4) + 3] = src[(i * 4) + 3];
+            return_bitmap[i * 4]       = src[2 + (i * 4)];
+            return_bitmap[1 + (i * 4)] = src[1 + (i * 4)];
+            return_bitmap[2 + (i * 4)] = src[i * 4];
+            return_bitmap[3 + (i * 4)] = src[3 + (i * 4)];
         }
     } else {
         for (u64 i = 0; i < (render_width * render_height); i++) {
