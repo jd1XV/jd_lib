@@ -42,12 +42,7 @@ struct jd_Window {
     jd_String function_name;
     
     HWND handle;
-    WNDCLASSA wndclass;
-    jd_String wndclass_str;
-    
     HDC device_context;
-    
-    f32 dpi_scaling;
     
     f32 frame_time;
     jd_Timer frame_watch;
@@ -347,6 +342,88 @@ void jd_AppDefaultTitlebar(jd_Window* window) {
     jd_UIRegionEnd();
 }
 
+void jd_AppCreateGLContext(jd_App* app) {
+    WNDCLASSEXW bootstrap_wc = {0};
+    bootstrap_wc.cbSize = sizeof(WNDCLASSEX);
+    bootstrap_wc.lpfnWndProc   = DefWindowProcW;
+    bootstrap_wc.hInstance     = GetModuleHandle(NULL);
+    bootstrap_wc.lpszClassName = L"bootstrap_wc";
+    bootstrap_wc.cbWndExtra    = sizeof(jd_Window*);
+    RegisterClassExW(&bootstrap_wc);
+    
+    HWND bootstrap_window = CreateWindowExW(0,
+                                            L"bootstrap_wc",
+                                            L"bootstrap_window",
+                                            0,
+                                            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                                            NULL,
+                                            NULL,
+                                            GetModuleHandle(NULL),
+                                            NULL
+                                            );
+    
+    if (bootstrap_window == NULL) {
+        jd_LogError("Could not create bootstrap window.", jd_Error_MissingResource, jd_Error_Fatal);
+    }
+    
+    HDC bootstrap_hdc = GetDC(bootstrap_window);
+    if (!bootstrap_hdc) {
+        jd_LogError("Could not create bootstrap Win32 device context.", jd_Error_MissingResource, jd_Error_Fatal);
+    }
+    
+    PIXELFORMATDESCRIPTOR pfd = {sizeof(pfd)};
+    pfd.nVersion = 1;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW|PFD_SUPPORT_OPENGL|PFD_DOUBLEBUFFER;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.cColorBits = 32;
+    pfd.cDepthBits = 24;
+    pfd.cStencilBits = 8;
+    pfd.iLayerType = PFD_MAIN_PLANE;
+    
+    i32 pf = ChoosePixelFormat(bootstrap_hdc, &pfd);
+    if (pf == 0) {
+        jd_LogError("Could not create pixel format descriptor.", jd_Error_MissingResource, jd_Error_Fatal);
+    }
+    
+    if (!(SetPixelFormat(bootstrap_hdc, pf, &pfd))) {
+        jd_LogError("Could not set pixel format.", jd_Error_MissingResource, jd_Error_Fatal);
+    }
+    
+    HGLRC bootstrap_context = wglCreateContext(bootstrap_hdc);
+    wglMakeCurrent(bootstrap_hdc, bootstrap_context);
+    
+    gladLoadGL();
+    gladLoadWGL(bootstrap_hdc);
+    
+    u32 num_formats = 0;
+    
+    const i32 pixel_attribs[] = {
+        WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
+        WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
+        WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
+        WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
+        WGL_COLOR_BITS_ARB, 32,
+        WGL_DEPTH_BITS_ARB, 24,
+        WGL_STENCIL_BITS_ARB, 8,
+        0
+    };
+    
+    const i32 ctx_attribs[] = {
+        WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 6,
+        0
+    };
+    
+    
+    wglChoosePixelFormatARB(bootstrap_hdc, pixel_attribs, 0, 1, &pf, &num_formats);
+    app->ogl_context = wglCreateContextAttribsARB(bootstrap_hdc, 0, ctx_attribs);
+    
+    wglMakeCurrent(bootstrap_hdc, 0);
+    wglDeleteContext(bootstrap_context);
+    ReleaseDC(bootstrap_window, bootstrap_hdc);
+    DestroyWindow(bootstrap_window);
+}
+
 jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     if (!config) {
         jd_LogError("Window initialized without jd_WindowConfig*", jd_Error_APIMisuse, jd_Error_Fatal);
@@ -367,7 +444,6 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     jd_Arena* arena = jd_ArenaCreate(0, 0);
     jd_Window* window = jd_ArenaAlloc(arena, sizeof(*window));
     window->app = config->app;
-    window->wndclass_str = jd_StringPush(arena, config->id_str);
     window->title = jd_StringPush(arena, config->title);
     window->arena = arena;
     window->frame_arena = jd_ArenaCreate(0, 0);
@@ -401,18 +477,18 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
         } break;
     }
     
-    window->dpi_scaling = 1.0f; // TODO: Handle HiDPI
+    jd_String16 wndclass_string = jd_UTF8ToUTF16(window->frame_arena, config->id_string);
     
-    WNDCLASSEX wc = {0};
+    WNDCLASSEXW wc = {0};
     wc.cbSize = sizeof(WNDCLASSEX);
     wc.lpfnWndProc   = jd_WindowProc;
     wc.hInstance     = GetModuleHandle(NULL);
-    wc.lpszClassName = window->wndclass_str.mem;
+    wc.lpszClassName = wndclass_string.mem;
     wc.cbWndExtra    = sizeof(jd_Window*);
     wc.hbrBackground = NULL;
     wc.hCursor       = NULL;
     
-    RegisterClassEx(&wc);
+    RegisterClassExW(&wc);
     
     // Create the window
     u32 win_style = 0;
@@ -422,10 +498,11 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
         win_style = WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
     }
     
-    window->handle = CreateWindowExA(
-                                     CS_OWNDC|CS_HREDRAW|CS_VREDRAW,
-                                     window->wndclass_str.mem,
-                                     window->title.mem,
+    jd_String16 title16 = jd_UTF8ToUTF16(window->frame_arena, window->title);
+    
+    window->handle = CreateWindowExW(0,
+                                     wndclass_string.mem,
+                                     title16.mem,
                                      win_style,
                                      CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                      NULL,
@@ -433,7 +510,6 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
                                      GetModuleHandle(NULL),
                                      NULL
                                      );
-    
     
     if (window->handle == NULL) {
         jd_LogError("Could not create window.", jd_Error_MissingResource, jd_Error_Fatal);
@@ -458,14 +534,6 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     
     window->device_context = GetDC(window->handle);
     
-    if (!window->device_context) {
-        jd_LogError("Could not create Win32 device context.", jd_Error_MissingResource, jd_Error_Fatal);
-    }
-    
-    HWND dummy_win = 0;
-    HDC dummy_hdc = 0;
-    HGLRC fake_context = 0;
-    
     const i32 pixel_attribs[] = {
         WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
         WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
@@ -477,113 +545,20 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
         0
     };
     
-    const i32 ctx_attribs[] = {
-        WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 6,
-        0
-    };
+    u32 num_formats = 0;
+    i32 pf = 0;
     
-    if (!config->app->renderer_initialized) {
-        WNDCLASSEX dummy_wc = {0};
-        dummy_wc.cbSize = sizeof(WNDCLASSEX);
-        dummy_wc.lpfnWndProc   = DefWindowProc;
-        dummy_wc.hInstance     = GetModuleHandle(NULL);
-        dummy_wc.lpszClassName = "dummy_wndclass";
-        dummy_wc.cbWndExtra    = sizeof(jd_Window*);
-        RegisterClassEx(&dummy_wc);
-        u32 win_style = WS_OVERLAPPEDWINDOW;
-        
-        dummy_win = CreateWindowExA(
-                                    CS_OWNDC,
-                                    "dummy_wndclass",
-                                    "dummy_window",
-                                    win_style,
-                                    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                                    NULL,
-                                    NULL,
-                                    GetModuleHandle(NULL),
-                                    NULL
-                                    );
-        
-        if (dummy_win == NULL) {
-            jd_LogError("Could not create bootstrap window.", jd_Error_MissingResource, jd_Error_Fatal);
-        }
-        
-        dummy_hdc = GetDC(dummy_win);
-        if (!dummy_hdc) {
-            jd_LogError("Could not create bootstrap Win32 device context.", jd_Error_MissingResource, jd_Error_Fatal);
-        }
-        
-        PIXELFORMATDESCRIPTOR pfd = {
-            sizeof(PIXELFORMATDESCRIPTOR),
-            1,
-            PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,    //Flags
-            PFD_TYPE_RGBA,        // The kind of framebuffer. RGBA or palette.
-            32,                   // Colordepth of the framebuffer.
-            0, 0, 0, 0, 0, 0,
-            0,
-            0,
-            0,
-            0, 0, 0, 0,
-            24,                   // Number of bits for the depthbuffer
-            8,                    // Number of bits for the stencilbuffer
-            0,                    // Number of Aux buffers in the framebuffer.
-            PFD_MAIN_PLANE,
-            0,
-            0, 0, 0
-        };
-        
-        i32 pf = ChoosePixelFormat(dummy_hdc, &pfd);
-        if (pf == 0) {
-            jd_LogError("Could not create pixel format descriptor.", jd_Error_MissingResource, jd_Error_Fatal);
-        }
-        
-        if (!(SetPixelFormat(dummy_hdc, pf, &pfd))) {
-            jd_LogError("Could not set pixel format.", jd_Error_MissingResource, jd_Error_Fatal);
-        }
-        
-        fake_context = wglCreateContext(dummy_hdc);
-        wglMakeCurrent(dummy_hdc, fake_context);
-        
-        gladLoadGL();
-        gladLoadWGL(dummy_hdc);
-        
-        u32 num_formats = 0;
-        
-        wglChoosePixelFormatARB(window->device_context, pixel_attribs, 0, 1, &pf, &num_formats);
-        SetPixelFormat(window->device_context, pf, &pfd);
-        config->app->ogl_context = wglCreateContextAttribsARB(window->device_context, 0, ctx_attribs);
-        
-        wglMakeCurrent(dummy_hdc, 0);
-        wglDeleteContext(fake_context);
-        
-    } else {
-        u32 num_formats = 0;
-        i32 pf = 0;
-        
-        PIXELFORMATDESCRIPTOR pfd = {
-            sizeof(PIXELFORMATDESCRIPTOR),
-            1,
-            PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,    //Flags
-            PFD_TYPE_RGBA,        // The kind of framebuffer. RGBA or palette.
-            32,                   // Colordepth of the framebuffer.
-            0, 0, 0, 0, 0, 0,
-            0,
-            0,
-            0,
-            0, 0, 0, 0,
-            24,                   // Number of bits for the depthbuffer
-            8,                    // Number of bits for the stencilbuffer
-            0,                    // Number of Aux buffers in the framebuffer.
-            PFD_MAIN_PLANE,
-            0,
-            0, 0, 0
-        };
-        
-        wglChoosePixelFormatARB(window->device_context, pixel_attribs, 0, 1, &pf, &num_formats);
-        SetPixelFormat(window->device_context, pf, &pfd);
-    }
+    PIXELFORMATDESCRIPTOR pfd = {sizeof(pfd)};
+    pfd.nVersion = 1;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW|PFD_SUPPORT_OPENGL|PFD_DOUBLEBUFFER;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.cColorBits = 32;
+    pfd.cDepthBits = 24;
+    pfd.cStencilBits = 8;
+    pfd.iLayerType = PFD_MAIN_PLANE;
     
+    wglChoosePixelFormatARB(window->device_context, pixel_attribs, 0, 1, &pf, &num_formats);
+    SetPixelFormat(window->device_context, pf, &pfd);
     wglMakeCurrent(window->device_context, config->app->ogl_context);
     
     if (config->v_sync) {
@@ -594,10 +569,9 @@ jd_Window* jd_AppCreateWindow(jd_WindowConfig* config) {
     
     ShowWindow(window->handle, SW_SHOW);
     
-    if (!config->app->renderer_initialized) {
+    if (!window->app->renderer_initialized) {
         jd_2DRendererInit();
-        config->app->renderer_initialized = true;
-        DestroyWindow(dummy_win);
+        window->app->renderer_initialized = true;
     }
     
     jd_UserLockGet(config->app->lock);
@@ -687,6 +661,10 @@ LRESULT CALLBACK jd_WindowProc(HWND window_handle, UINT msg, WPARAM w_param, LPA
             if (LOWORD(l_param) == HTTOP) {
                 return 0;
             }
+            break;
+        }
+        
+        case WM_PAINT: {
             break;
         }
         
@@ -907,6 +885,8 @@ jd_App* jd_AppCreate(jd_AppConfig* config) {
         
         jd_AppLoadLib(app);
     }
+    
+    jd_AppCreateGLContext(app);
     
     return app;
 }

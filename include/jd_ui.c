@@ -894,7 +894,7 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
                 image_position.y += (b->rect.max.y - height) / 2;
             }
             
-            jd_2DTextureRect(b->texture, image_position, jd_V2F(width, height), corner_radius, softness, thickness, clipping_rectangle_self);
+            jd_2DColorTextureRect(b->texture, image_position, jd_V2F(width, height), corner_radius, softness, thickness, color, clipping_rectangle_self);
         }
         
         if (b->flags & jd_UIBoxFlags_TextEdit) {
@@ -950,12 +950,21 @@ void jd_UI_Internal_RenderBoxes(jd_UIBoxRec* root, b32 clip_parent) {
         
         else if (b->label.count > 0) {
             jd_V2F string_size = jd_FontGetTextLayoutExtent(b->font, b->font_size, b->label, 0.0f, false);
+            
             string_size.x = jd_Min(b->rect.max.x, string_size.x);
             string_size.y = jd_Min(b->rect.max.y, string_size.y);
             string_pos.x += (((rect_size.x - (b->shape.padding.x * 2)) - string_size.x) * b->label_alignment.x);
             string_pos.y += (((rect_size.y - (b->shape.padding.y * 2)) - string_size.y) * b->label_alignment.y);
             jd_V3F final_pos = {string_pos.x, string_pos.y, z};
-            jd_2DString(b->font, b->label, b->font_size, string_pos, colors.label, clipping_rectangle_parent, 0.0f, false);
+            
+            jd_V4F clipping_rectangle_label = {
+                .x0 = clipping_rectangle_parent.x0 + b->shape.padding.x,
+                .y0 = clipping_rectangle_parent.y0,
+                .x1 = clipping_rectangle_parent.x1 - b->shape.padding.y,
+                .y1 = clipping_rectangle_parent.y1
+            };
+            
+            jd_2DStringTruncated(b->font, b->label, b->font_size, string_pos, colors.label, clipping_rectangle_label, 0.0f, false);
         }
         
         b->rect = jd_2DRectClip(b->rect, clipping_rectangle_parent);
@@ -989,7 +998,7 @@ void jd_UIEnd() {
     
     if (_jd_internal_ui_state.seeds->count > 1 || // There is always a seed in the seed stack!
         _jd_internal_ui_state.parent_stack->count > 0 ||
-        _jd_internal_ui_state.font_stack->count > 0 ||
+        _jd_internal_ui_state.font_stack->count > 1 ||
         _jd_internal_ui_state.color_stack->count > 1) {
         jd_LogError("A UI stack is not empty at jd_UIEnd()! Mismatched Push/Pop.", jd_Error_APIMisuse, jd_Error_Warning);
     }
@@ -1598,6 +1607,19 @@ jd_UIResult jd_UIImage(jd_String string_id, jd_UIShape shape, jd_Texture texture
     config.string_id = string_id;
     config.shape = shape;
     config.cursor = jd_Cursor_Default;
+    config.maintain_texture_aspect_ratio = maintain_aspect_ratio;
+    jd_UIResult result = jd_UIBoxBegin(&config);
+    jd_UIBoxEnd();
+    return result;
+}
+
+jd_UIResult jd_UIImageButton(jd_String string_id, jd_UIShape shape, jd_UIColors colors, jd_Texture texture, b32 maintain_aspect_ratio) {
+    jd_UIBoxConfig config = {0};
+    config.flags = jd_UIBoxFlags_Textured|jd_UIBoxFlags_Clickable;
+    config.texture = texture;
+    config.string_id = string_id;
+    config.shape = shape;
+    config.cursor = jd_Cursor_Hand;
     config.maintain_texture_aspect_ratio = maintain_aspect_ratio;
     jd_UIResult result = jd_UIBoxBegin(&config);
     jd_UIBoxEnd();

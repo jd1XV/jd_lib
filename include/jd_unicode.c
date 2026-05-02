@@ -191,7 +191,7 @@ jd_String16 jd_UTF8ToUTF16(jd_Arena* arena, jd_String string) {
         }
     }
     
-    jd_ArenaPopTo(arena, s.pos + (sizeof(u16) * (string16.count)));
+    jd_ArenaPopTo(arena, s.pos + (sizeof(u16) * (string16.count + 1)));
     return string16;
 }
 
@@ -242,7 +242,7 @@ jd_String32 jd_UTF8ToUTF32(jd_Arena* arena, jd_String string) {
         string32.count++;
     }
     
-    jd_ArenaPopTo(arena, s.pos + (sizeof(u32) * (string32.count)));
+    jd_ArenaPopTo(arena, s.pos + (sizeof(u32) * (string32.count + 1)));
     return string32;
 }
 
@@ -465,10 +465,10 @@ jd_String jd_UnicodeEncodeUTF32toUTF8(jd_Arena* arena, jd_UTFDecodedString input
 }
 
 void jd_UnicodeSeekDeltaUTF8(jd_String string, u64* index, i64 delta) {
-    u64 i = *index;
-    i64 si = i;
-    if (si + delta > (i64)string.count) delta = string.count - i;
-    if (si + delta < 0)            delta = -si;
+    u64 ui = *index;
+    i64 i = ui;
+    if (i + delta > (i64)string.count) delta = string.count - i;
+    if (i + delta < 0)                 delta = -i;
     
     if (delta < 0) {
         for (i64 d = delta; d < 0; d++) {

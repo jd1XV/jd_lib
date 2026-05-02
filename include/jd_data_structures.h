@@ -52,7 +52,6 @@ x->prev->prev = _prev; \
 x->prev->next = x; \
 } while (0) \
 
-
 #define jd_DLinksClear(x) \
 do { \
 jd_SLinkClear(x); \

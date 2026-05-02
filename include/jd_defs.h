@@ -104,6 +104,8 @@ typedef struct jd_V4F {
 
 #define jd_V4F(x, y, z, w) (jd_V4F){x, y, z, w}
 
+#define jd_V4FtoSizeV2F(v4f) (jd_V2F){v4f.max.x - v4f.min.x, v4f.max.y - v4f.min.y}
+
 #define jd_V4FAddRGB(a, b) {a.x + b.x, a.y + b.y, a.w + b.w, a.h}
 #define jd_V4FSubRGB(a, b) {a.x - b.x, a.y - b.y, a.w - b.w, a.h}
 

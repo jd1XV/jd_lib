@@ -5,7 +5,19 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "dep/stb/stb_image_write.h"
 
-static jd_ReadOnly jd_String jd_internal_vs_string = jd_StrConst("#version 460\n"
+//-
+/*
+
+TODOs:
+
+1. Make modifications necessary to support transparent windows on platforms that support them
+                     ~    This will likely require rendering to a separate framebuffer that can be read on the CPU so as to interface with functions like UpdateLayeredWindow on Win32.
+                                                            
+
+                */
+//-
+
+static jd_ReadOnly jd_String jd_internal_vs_string = jd_StrConst("#version 330\n"
                                                                  "layout (location = 0) in vec3 vert_xyz;\n"
                                                                  "layout (location = 1) in vec3 vert_uvw;\n"
                                                                  "layout (location = 2) in vec4 vert_col;\n"
@@ -39,7 +51,7 @@ static jd_ReadOnly jd_String jd_internal_vs_string = jd_StrConst("#version 460\n
                                                                  "}"
                                                                  );
 
-static jd_ReadOnly jd_String jd_internal_fs_string = jd_StrConst("#version 460\n"
+static jd_ReadOnly jd_String jd_internal_fs_string = jd_StrConst("#version 330\n"
                                                                  "in vec3 fs_xyz;\n"
                                                                  "in vec3 fs_uvw;\n"
                                                                  "in vec4 fs_col;\n"
@@ -461,7 +473,7 @@ void jd_2DRendererInit() {
     jd_2DRenderer* r = &jd_global_2d_renderer;
     r->arena = arena;
     r->frame_arena = jd_ArenaCreate(0, 0);
-    r->vertices = jd_DArrayCreate(KILOBYTES(512) * sizeof(jd_GL2DVertex), sizeof(jd_GL2DVertex));
+    r->vertices = jd_DArrayCreate(MEGABYTES(4) / sizeof(jd_GL2DVertex), sizeof(jd_GL2DVertex));
     jd_2DRenderObjects* objects = &r->objects;
     jd_2DShaderCreate();
     
@@ -513,7 +525,11 @@ void jd_2DRendererInit() {
     glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(jd_GL2DVertex), (void*)pos);
     pos += sizeof(f32);
     
+#if 1
+    glBufferStorage(GL_ARRAY_BUFFER, MEGABYTES(2), NULL, GL_DYNAMIC_STORAGE_BIT);
+#else
     glBufferData(GL_ARRAY_BUFFER, KILOBYTES(512) * sizeof(jd_GL2DVertex), NULL, GL_DYNAMIC_DRAW);
+#endif
     
     u64 core_texture_cache_w = 2048;
     u64 core_texture_cache_h = 2048;
@@ -770,22 +786,13 @@ jd_Texture jd_GlyphGetTexture(jd_Font* font, u32 codepoint, u16 point_size) {
     b32 exists = jd_TextureCacheCheck(jd_global_2d_renderer.core_texture_cache, jd_GlyphTextureID(font, point_size, codepoint), &t);
     if (!exists) {
         jd_Bitmap bitmap = jd_FontGetGlyphBitmap(jd_global_2d_renderer.frame_arena, font, codepoint, point_size);
-        if (!bitmap.bitmap) {
-            codepoint = 0;
-            b32 fallback_exists = jd_TextureCacheCheck(jd_global_2d_renderer.core_texture_cache, jd_GlyphTextureID(font, point_size, codepoint), &t);
-            if (!fallback_exists) {
-                bitmap = jd_FontGetGlyphBitmap(jd_global_2d_renderer.frame_arena, font, codepoint, point_size);
-                t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, true);
-            }
-        } else {
-            t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, true);
-        }
+        t = jd_TextureCacheInsert(jd_global_2d_renderer.core_texture_cache, false, jd_GlyphTextureID(font, point_size, codepoint), bitmap.bitmap, false, bitmap.width, bitmap.height, true);
     }
     
     return t;
 }
 
-void jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip) {
+b32 jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip) {
     f32 x = position.x;
     f32 y = position.y;
     f32 z = 0;
@@ -808,7 +815,7 @@ void jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 
         jd_V4F clipped_rect = jd_2DRectClip(rect, clip);
         if (clipped_rect.max.x < clipped_rect.min.x ||
             clipped_rect.max.y < clipped_rect.min.y) {
-            return;
+            return false;
         }
         jd_2DTextureClip(&t, rect, clipped_rect);
         rect = clipped_rect;
@@ -851,6 +858,53 @@ void jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 
     jd_DArrayPushBack(vertices, &bottom_left);
     jd_DArrayPushBack(vertices, &top_left);
     jd_DArrayPushBack(vertices, &top_right);
+    return true;
+}
+
+// TODO: Add support for RTL (and ideally vertical layouts)
+
+void jd_2DStringTruncated(jd_Font* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap, b32 wrap_on_newlines) {
+    jd_V2F p = position;
+    jd_V2F ext = jd_FontGetTextLayoutExtent(font, point_size, string, wrap, wrap_on_newlines);
+    p.y -= ((font->ascent - font->layout_line_height) * point_size);
+    
+    jd_Texture ellipses = jd_GlyphGetTexture(font, 0x2026, point_size);
+    jd_GlyphMetrics* ellipses_metrics = jd_FontGetGlyphMetrics(font, 0x2026);
+    
+    u64 truncate_index = jd_FontGetTruncateIndex(font, point_size, string, wrap, wrap_on_newlines, jd_V4FtoSizeV2F(clip));
+    
+    u64 index32 = 0;
+    
+    for (u64 i = 0; i < string.count;) { 
+        if (index32 == truncate_index) {
+            jd_2DGlyphRect(font, ellipses_metrics, 0x2026, point_size, p, color, clip);
+            break;
+        }
+        
+        u32 codepoint = jd_Codepoint8to32(string, &i);
+        
+        if (codepoint) {
+            jd_GlyphMetrics* g_metrics = jd_FontGetGlyphMetrics(font, codepoint);
+            if (wrap && (p.x + jd_F32RoundUp(g_metrics->h_advance * point_size)) > wrap) {
+                p.x  = position.x;
+                p.y += (font->line_adv * point_size);
+            }
+            
+            if (wrap_on_newlines && codepoint == 0x0a) {
+                p.x = position.x;
+                p.y += (font->line_adv * point_size);
+            }
+            
+            if (codepoint == 0x0d) {
+                continue;
+            }
+            
+            jd_2DGlyphRect(font, g_metrics, codepoint, point_size, p, color, clip);
+            p.x += jd_F32RoundUp(g_metrics->h_advance * point_size);
+        }
+        
+        index32++;
+    }
 }
 
 void jd_2DString(jd_Font* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap, b32 wrap_on_newlines) {
@@ -877,7 +931,10 @@ void jd_2DString(jd_Font* font, jd_String string, u16 point_size, jd_V2F positio
                 continue;
             }
             
-            jd_2DGlyphRect(font, g_metrics, codepoint, point_size, p, color, clip);
+            b32 drawn = jd_2DGlyphRect(font, g_metrics, codepoint, point_size, p, color, clip);
+            if (!drawn) {
+                break;
+            }
             p.x += jd_F32RoundUp(g_metrics->h_advance * point_size);
         }
     }

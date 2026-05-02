@@ -1,3 +1,9 @@
+#if 0
+#include <stdatomic.h>
+
+static _Atomic(u64) jd_arena_total_memory_committed = 0;
+#endif
+
 void jd_ZeroMemory(void* dest, u64 size) {
     ZeroMemory(dest, size);
 }
@@ -25,17 +31,22 @@ void jd_HeapFree(void* ptr) {
 
 inline u8* _jd_Internal_ArenaReserve(u64 reserve, u64 commit_block_size) {
     u8* ptr = 0;
-    
     ptr = VirtualAlloc(0, reserve, MEM_RESERVE, PAGE_READWRITE);
     VirtualAlloc(ptr, commit_block_size, MEM_COMMIT, PAGE_READWRITE);
     return ptr;
 }
 
 inline void _jd_Internal_ArenaCommit(jd_Arena* arena, u64 size) {
+#if 0
+    jd_arena_total_memory_committed += size;
+#endif
     VirtualAlloc(arena->mem + arena->commit_pos, size, MEM_COMMIT, PAGE_READWRITE); 
 }
 
 inline void _jd_Internal_ArenaDecommit(jd_Arena* arena, u64 pos, u64 size) {
+#if 0
+    jd_arena_total_memory_committed -= size;
+#endif
     VirtualFree(arena->mem + pos, size, MEM_DECOMMIT);
 }
 

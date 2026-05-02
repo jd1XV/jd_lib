@@ -298,6 +298,7 @@ jd_ExportFn jd_ForceInline void           jd_UIResetScroll(jd_UIBoxRec* b);
 jd_ExportFn jd_ForceInline jd_UIBoxRec*   jd_UIGetDebugBox();
 
 jd_ExportFn jd_UIResult jd_UIImage(jd_String string_id, jd_UIShape shape, jd_Texture texture, b32 maintain_aspect_ratio);
+jd_ExportFn jd_UIResult jd_UIImageButton(jd_String string_id, jd_UIShape shape, jd_UIColors colors, jd_Texture texture, b32 maintain_aspect_ratio);
 jd_ExportFn jd_UIResult jd_UIButtonEx(jd_String label, jd_UIShape shape, jd_UIColors colors, jd_V2F label_alignment, jd_UIBoxFlags flags);
 jd_ExportFn jd_UIResult jd_UISliderF32(jd_String string_id, jd_UIShape shape, jd_UIShape shape_button, jd_UIAxis axis, f32* v, f32 min, f32 max);
 jd_ExportFn jd_UIResult jd_UISliderU64(jd_String string_id, jd_UIShape shape, jd_UIShape shape_button, jd_UIAxis axis, u64* v, u64 min, u64 max);

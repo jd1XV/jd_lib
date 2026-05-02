@@ -38,7 +38,7 @@ void jd_2DRendererInit();
 jd_ExportFn u32 jd_TextureKey(jd_String s);
 
 jd_ExportFn void jd_2DColorRect(jd_V2F position, jd_V2F size, jd_V4F color, f32 corner_rad, f32 softness, f32 thickness, jd_V4F clip);
-jd_ExportFn void jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip);
+jd_ExportFn b32  jd_2DGlyphRect(jd_Font* font, jd_GlyphMetrics* metrics, u32 codepoint, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip);
 jd_ExportFn void jd_2DTextureRect(jd_Texture t, jd_V2F position, jd_V2F size, f32 corner_rad, f32 softness, f32 thickness, jd_V4F clip);
 jd_ExportFn void jd_2DColorTextureRect(jd_Texture t, jd_V2F position, jd_V2F size, f32 corner_rad, f32 softness, f32 thickness, jd_V4F color, jd_V4F clip);
 jd_ExportFn void jd_2DString(jd_Font* font, jd_String string, u16 point_size, jd_V2F position, jd_V4F color, jd_V4F clip, f32 wrap, b32 wrap_on_newlines);

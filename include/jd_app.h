@@ -88,7 +88,7 @@ typedef void (*jd_TitleBarFunctionPtr)(struct jd_Window* window);
 typedef struct jd_WindowConfig {
     jd_App* app;
     jd_String title;
-    jd_String id_str;
+    jd_String id_string;
     jd_AppWindowFunctionPtr function_ptr;
     jd_String function_name;
     
